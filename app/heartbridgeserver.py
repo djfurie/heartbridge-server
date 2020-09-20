@@ -135,8 +135,11 @@ class HeartBridgeServer:
 
         subscribers = self._storage.add_subscription(performance_id, connection_id, expiration_time)
         subscribers = [x[0] for x in subscribers]
-        return subscribers, json.dumps({"performance_id": performance_id,
-                                        "active_subcriptions": len(subscribers)})
+        return subscribers, json.dumps({
+            "action": "subscriber_count_update",
+            "performance_id": performance_id,
+            "active_subcriptions": len(subscribers)
+        })
 
     def register_handler(self, payload: str) -> str:
         # Generate a new performance id to use
@@ -152,8 +155,11 @@ class HeartBridgeServer:
             logging.warning("Invalid token data: %s", e)
             return json.dumps({"error": str(e)})
 
-        return_json = {'token': token_str.decode('utf-8'),
-                       'performance_id': performance_id}
+        return_json = {
+            'action': 'register_return',
+            'token': token_str.decode('utf-8'),
+            'performance_id': performance_id
+        }
 
         return json.dumps(return_json)
 
@@ -183,8 +189,11 @@ class HeartBridgeServer:
             logging.warning("Invalid token data: %s", e)
             return json.dumps({"error": str(e)})
 
-        return_json = {"token": token_str.decode("utf-8"),
-                       "performance_id": token.performance_id}
+        return_json = {
+            "action": "register_return",
+            "token": token_str.decode("utf-8"),
+            "performance_id": token.performance_id
+        }
 
         return json.dumps(return_json)
 
@@ -207,7 +216,10 @@ class HeartBridgeServer:
         # Return a list of all the connection ids to broadcast the heartrate to
         subs = [x[0] for x in subs]
 
-        return subs, json.dumps({"heartrate": p['heartrate']})
+        return subs, json.dumps({
+            "action": "heartrate_update",
+            "heartrate": p['heartrate']
+        })
 
 
 class HeartBridgeStorage:

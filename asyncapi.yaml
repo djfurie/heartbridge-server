@@ -1,0 +1,213 @@
+asyncapi: '2.0.0'
+info:
+  title: HeartBridge Server API
+  version: 0.0.1
+
+servers:
+  production:
+    url: api.heartbridge.io
+    protocol: wss
+    description: This is the live production server
+  dev:
+    url: heartbridge.furiousenterprises.net
+    protocol: ws
+    description: development and testing server
+
+components:
+  messages:
+    subscribe:
+      name: subscribe
+      title: Subcribe
+      summary: Subscribe to a Performance ID
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/subscribePayload"
+    register:
+      name: register
+      title: Register Performance
+      summary: Register a new performance.  Will cause a return of a token and performance ID to be used when publishing
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/registerPayload"
+    register_return:
+      name: register_return
+      title: Register Return Values
+      summary: Sent after registering a performance.  Contains a token and performance id to allow publishing
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/registerReturnPayload"
+    update:
+      name: update
+      title: Update Performance
+      summary: >
+        Update a performance token with new information.  Performance ID will stay the same.
+        Server will respond with a register_return message with the new token
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/updatePayload"
+    publish:
+      name: publish
+      title: Publish Heart Rate
+      summary: >
+        Publish a heartrate to all of the subscribers.  Must have a valid token (from calling 'register') in order to publish.
+        Performance ID is encoded in the token.
+        TODO: Enumerate error conditions related to expired tokens and all that stuff...
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/publishPayload"
+    heartrate_update:
+      name: heartrate_update
+      title: Heartrate Update
+      summary: >
+        Sent to all subscribers when a new heartrate is published
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/heartrateUpdatePayload"
+    subscriber_count_update:
+      name: subscriber_count_update
+      title: Subscriber Count Update
+      summary: >
+        Broadcast to all of the subscribers of a performance whenever the total number subscribers changes
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/subscriberCountUpdatePayload"
+
+  schemas:
+    ############################################################################################
+    ######### These are all of the fields that may appear in any of the JSON payloads ##########
+    ############################################################################################
+    performance_id:
+      type: string
+      description: A 6 character letter & number string unique to a performance
+      pattern: "^[ABCDEFGHJKLMNPQRSTXYZ23456789]{6}"
+    token:
+      type: string
+      description: A JWT token used to authorize publishing of heartbeat data to a performance.
+    artist:
+      type: string
+      description: The Artist's name- can be anything
+    title:
+      type: string
+      description: The title of the performance- can be anything
+    performance_date:
+      type: integer
+      description: The starting time of the performance, represented by a Unix timestamp
+    heartrate:
+      type: integer
+      description: A heartrate
+      minimum: 20
+      maximum: 230
+    active_subscriptions:
+      type: integer
+      description: The number of active subscriptions for the performance
+      minimum: 0
+
+    #################################################################################
+    ######### These describe all of the payloads for all of the operations ##########
+    #################################################################################
+    subscribePayload:
+      type: object
+      properties:
+        action:
+          type: string
+          description: Indicates the payload is for subscribing to a performance
+          const: subscribe
+        performance_id:
+          $ref: "#/components/schemas/performance_id"
+
+    registerPayload:
+      type: object
+      properties:
+        action:
+          type: string
+          description: Inidcates the payload is for a register operation
+          const: register
+        artist:
+          $ref: "#/components/schemas/artist"
+        title:
+          $ref: "#/components/schemas/title"
+        performance_date:
+          $ref: "#/components/schemas/performance_date"
+
+    registerReturnPayload:
+      type: object
+      properties:
+        action:
+          type: string
+          description: Indicates this payload is a response to registering or updating a performance
+          const: register_return
+        token:
+          $ref: "#/components/schemas/token"
+        performance_id:
+          $ref: "#/components/schemas/performance_id"
+
+    updatePayload:
+      type: object
+      properties:
+        action:
+          type: string
+          description: Indicates the payload is for a token update operation
+          const: update
+        token:
+          $ref: "#/components/schemas/token"
+        artist:
+          $ref: "#/components/schemas/artist"
+        title:
+          $ref: "#/components/schemas/title"
+        performance_date:
+          $ref: "#/components/schemas/performance_date"
+
+    publishPayload:
+      type: object
+      properties:
+        action:
+          type: string
+          description: Inidcates the payload is for a publish operation
+          const: publish
+        token:
+          $ref: "#/components/schemas/token"
+        heartrate:
+          $ref: "#/components/schemas/heartrate"
+
+    heartrateUpdatePayload:
+      type: object
+      properties:
+        action:
+          type: string
+          description: Indicates the payload is for new heartrate information
+          const: heartrate_update
+        heartrate:
+          $ref: "#/components/schemas/heartrate"
+
+    subscriberCountUpdatePayload:
+      type: object
+      properties:
+        action:
+          type: string
+          description: Indicates the payload is for updating the number of subscribers to a performance
+          const: subscriber_count_update
+        performance_id:
+          $ref: "#/components/schemas/performance_id"
+        active_subscriptions:
+          $ref: "#/components/schemas/active_subscriptions"
+
+
+##############################################################################################################
+######### Describe the API endpoints- we pass everything both send and receive through a single url ##########
+##############################################################################################################
+channels:
+  /:
+    publish:
+      message:
+        oneOf:
+          - $ref: '#/components/messages/subscribe'
+          - $ref: '#/components/messages/register'
+          - $ref: '#/components/messages/update'
+          - $ref: '#/components/messages/publish'
+    subscribe:
+      message:
+        oneOf:
+          - $ref: '#/components/messages/register_return'
+          - $ref: '#/components/messages/heartrate_update'
+          - $ref: '#/components/messages/subscriber_count_update'
+
