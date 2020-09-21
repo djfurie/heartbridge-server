@@ -1,7 +1,6 @@
 FROM tiangolo/uvicorn-gunicorn
-WORKDIR /app
-COPY requirements.txt requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
-EXPOSE 8000
-COPY ./app .
-# CMD ["uvicorn", "main:app", "--reload"]
+COPY ./app /app
+ADD requirements.txt /app
+RUN pip install -r requirements.txt
+EXPOSE 8000:8000
+CMD ["uvicorn", "main:app", "--reload", "--host=0.0.0.0"]
