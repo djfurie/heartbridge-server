@@ -9,8 +9,8 @@ servers:
     protocol: wss
     description: This is the live production server
   dev:
-    url: heartbridge.furiousenterprises.net
-    protocol: ws
+    url: heartbridge-dev.furiousenterprises.net
+    protocol: wss
     description: development and testing server
 
 components:
