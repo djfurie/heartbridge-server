@@ -1,4 +1,4 @@
-version: '3'
+
 services:
   traefik:
     image: "traefik:2.3"
@@ -23,4 +23,9 @@ services:
       - "traefik.http.routers.heartbridge.entrypoints=heartbridge"
 
   redis:
-    image: "redis:alpine"
+    image: "redis"
+    volumes:
+      - redis-data:/var/lib/redis
+
+volumes:
+  redis-data:
