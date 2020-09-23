@@ -1,0 +1,4 @@
+services:
+  heartbridge:
+    volumes:
+      - ./app:/app
