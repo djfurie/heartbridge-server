@@ -1,5 +1,4 @@
 import json
-import jwt
 import datetime
 import random
 import logging
@@ -7,16 +6,13 @@ import asyncio
 import aioredis
 from typing import List, Dict, Tuple, Optional, Callable, Awaitable, Any
 from .connection import HeartBridgeConnection, HeartBridgeDisconnect
-
-# Secret key for signing performer tokens
-HEARTBRIDGE_SECRET = "hbsecretkey"
-
-# Number of seconds in a day
-SECS_IN_HOUR = 60 * 60
-SECS_IN_DAY = 24 * SECS_IN_HOUR
+from .payload_types import HeartBridgeBasePayload, HeartBridgePayloadValidationException
 
 
 class HeartBridgeConnectionManager:
+    """
+    Keep track of active connections and dispatch events via callbacks
+    """
     ConnectCallBackType = Callable[[HeartBridgeConnection], Awaitable[None]]
     DisconnectCallBackType = Callable[[HeartBridgeConnection], Awaitable[None]]
     MessageCallBackType = Callable[[HeartBridgeConnection, Any], Awaitable[None]]
@@ -34,12 +30,12 @@ class HeartBridgeConnectionManager:
         self._on_message_handler: HeartBridgeConnectionManager.MessageCallBackType = on_message_handler
 
     async def add_connection(self, conn: HeartBridgeConnection):
-        # Store this connection in the dict of active connections
+        """ Store the connection in the dict of active connections and wait for data """
         self._active_connections[str(conn)] = conn
 
         # Accept the websocket connection
         await conn.accept()
-        logging.debug("Connected: %s", conn)
+        logging.info("Connected: %s", conn)
 
         # Fire the on_connect_handler callback
         if self._on_connect_handler:
@@ -50,125 +46,62 @@ class HeartBridgeConnectionManager:
             await self._listen_forever(conn)
         except HeartBridgeDisconnect:
             # The connection has been terminated
-            logging.debug("Disconnected: %s", conn)
+            logging.info("Disconnected: %s", conn)
             if self._on_disconnect_handler:
                 await self._on_disconnect_handler(conn)
+
+            # Remove the connection
+            self._remove_connection(conn)
 
     async def _listen_forever(self, conn: HeartBridgeConnection):
         # Listen forever
         while True:
             payload = await conn.receive()
             logging.debug("%s [RX]: %s", conn, payload)
-            #
+            # Do the callback on message received
             if self._on_message_handler:
                 await self._on_message_handler(conn, payload)
 
+    def _remove_connection(self, conn: HeartBridgeConnection):
+        if str(conn) in self._active_connections:
+            self._active_connections.pop(str(conn))
 
-class PerformanceId:
-    # Parameters for generating performance ids
-    VALID_PERFORMANCE_ID_CHARACTERS = "ABCDEFGHJKLMNPQRSTXYZ23456789"
-    PERFORMANCE_ID_LENGTH = 6
-
-    # Helper function for generation of performance_ids
-    @staticmethod
-    def generate() -> str:
-        performance_id = ""
-        while len(performance_id) < PerformanceId.PERFORMANCE_ID_LENGTH:
-            performance_id += PerformanceId.VALID_PERFORMANCE_ID_CHARACTERS[
-                random.randint(0, len(PerformanceId.VALID_PERFORMANCE_ID_CHARACTERS) - 1)]
-        return performance_id
-
-    # Helper function for validating a performance_id
-    @staticmethod
-    def is_valid(performance_id: str) -> bool:
-        if len(performance_id) != PerformanceId.PERFORMANCE_ID_LENGTH:
-            return False
-
-        for c in performance_id:
-            if c not in PerformanceId.VALID_PERFORMANCE_ID_CHARACTERS:
-                return False
-
-        return True
-
-
-class PerformanceToken:
-    class PerformanceTokenException(Exception):
-        pass
-
-    class PerformanceTokenDateException(PerformanceTokenException):
-        pass
-
-    def __init__(self, artist: str = "", title: str = "", performance_date: str = "", performance_id: str = ""):
-        self.artist = artist
-        self.title = title
-        self.performance_date = int(performance_date)
-        self.performance_id = performance_id
-
-    @classmethod
-    def from_json(cls, data: str):
-        p = json.loads(data)
-        return PerformanceToken.from_dict(p)
-
-    @classmethod
-    def from_dict(cls, data: dict):
-        return cls(artist=data.setdefault('artist', ""),
-                   title=data.setdefault('title', ""),
-                   performance_date=data.setdefault('performance_date', ""),
-                   performance_id=data.setdefault('performance_id', ""))
-
-    @classmethod
-    def from_token(cls, data: str, verify: bool = True, verify_nbf: bool = True, key=HEARTBRIDGE_SECRET):
-        # Attempt to verify/decode the token
-        token_data = jwt.decode(data, verify=verify, options={'verify_nbf': verify_nbf}, key=key)
-        return PerformanceToken.from_dict(token_data)
-
-    def generate(self):
-        # Validate that the date is legit (validity is from 5 minutes in the past to any time in the future)
-        date_now = int(datetime.datetime.now().timestamp())
-        start_date = self.performance_date
-        exp_date = start_date + SECS_IN_DAY
-        nbf_date = start_date - SECS_IN_HOUR
-        if date_now - 300 > start_date:
-            raise PerformanceToken.PerformanceTokenDateException(
-                f"Date {start_date} is too far in the past")
-
-        # Validate required fields are filled in with valid values
-        if not PerformanceId.is_valid(self.performance_id):
-            raise PerformanceToken.PerformanceTokenException("Performance Id is invalid!")
-
-        # Assemble the token contents
-        token_payload = {'artist': self.artist,
-                         'title': self.title,
-                         'nbf': nbf_date,
-                         'exp': exp_date,
-                         'iat': date_now,
-                         'performance_date': start_date,
-                         'performance_id': self.performance_id}
-
-        # Encode the token
-        token = jwt.encode(token_payload,
-                           HEARTBRIDGE_SECRET,
-                           algorithm='HS256')
-        return token
+    def close_connection(self, conn: HeartBridgeConnection):
+        conn.close()
 
 
 class HeartBridgeServer:
     def __init__(self):
         self._storage = HeartBridgeStorage()
         self._broker = PerformanceBroker()
-        self._connection_mgr = HeartBridgeConnectionManager()
+        self._connection_mgr = HeartBridgeConnectionManager(on_connect_handler=self.on_connect_handler,
+                                                            on_disconnect_handler=self.on_disconnect_handler,
+                                                            on_message_handler=self.on_message_handler)
 
     async def add_connection(self, conn: HeartBridgeConnection):
         await self._connection_mgr.add_connection(conn)
 
-    def connect_handler(self, connection_id: str):
-        logging.info("Connected: %s", connection_id)
-        return
+    async def on_connect_handler(self, conn: HeartBridgeConnection):
+        logging.error("on_connect_handler not implemented")
 
-    def disconnect_handler(self, connection_id: str):
-        logging.info("Disconnected: %s", connection_id)
-        # TODO: Terminate all subscriptions for this connection_id
-        return
+    async def on_disconnect_handler(self, conn: HeartBridgeConnection):
+        logging.error("on_disconnect_handler not implemented")
+
+    async def on_message_handler(self, conn: HeartBridgeConnection, payload: Any):
+        """ Dispatch messages from connected clients to the appropriate action handler """
+        try:
+            p = HeartBridgeBasePayload(**payload)
+        except HeartBridgePayloadValidationException as e:
+            self._return_exception(conn, e)
+            return
+
+        logging.info("[%s] Handle Action: %s", conn, p.json())
+
+    @staticmethod
+    def _return_exception(conn: HeartBridgeConnection, e: Exception):
+        logging.error("[%s] Exception: %s", conn, e)
+        error = {"error": str(e)}
+        asyncio.get_running_loop().create_task(conn.send(error))
 
     async def subscribe_handler(self, connection_id: str, payload: str) -> Tuple[List[str], str]:
         p = json.loads(payload)

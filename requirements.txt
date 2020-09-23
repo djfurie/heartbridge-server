@@ -4,3 +4,4 @@ fastapi
 uvicorn
 redis
 aioredis
+pydantic

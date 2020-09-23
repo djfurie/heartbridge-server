@@ -6,7 +6,7 @@ import json
 import logging
 
 LOGGING_FORMAT = '%(asctime)s :: %(name)s (%(levelname)s) -- %(message)s'
-logging.basicConfig(format=LOGGING_FORMAT, level=logging.DEBUG)
+logging.basicConfig(format=LOGGING_FORMAT, level=logging.INFO)
 
 # High level class instantiations
 app = FastAPI()
@@ -33,7 +33,7 @@ class ConnectionManager:
         self.active_connections.pop(connection_id)
 
     def broadcast(self, connection_ids, payload):
-        logging.debug("Scheduling a broadcast")
+        logging.info("Scheduling a broadcast")
         loop = asyncio.get_running_loop()
         for conn_id in connection_ids:
             # Does this websocket client belong to this replica?
@@ -56,7 +56,7 @@ class ConnectionManager:
                 ret_val = broadcast_payload
             elif action == 'subscribe':
                 connection_ids, broadcast_payload = await hbserver.subscribe_handler(connection_id, payload)
-                logging.debug("%s - %s", connection_ids, broadcast_payload)
+                logging.info("%s - %s", connection_ids, broadcast_payload)
                 self.broadcast(connection_ids, broadcast_payload)
             elif action == 'register':
                 ret_val = hbserver.register_handler(payload)
@@ -80,7 +80,5 @@ manager = ConnectionManager()
 
 @app.websocket("/")
 async def websocket_endpoint(websocket: WebSocket):
-    logging.error("TEST TEST")
-    logging.debug("DEBUG DEBUG")
     conn = HeartBridgeConnection(websocket)
     await hbserver.add_connection(conn)
