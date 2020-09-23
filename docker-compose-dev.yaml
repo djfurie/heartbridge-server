@@ -2,3 +2,5 @@ services:
   heartbridge:
     volumes:
       - ./app:/app
+    deploy:
+      replicas: 2

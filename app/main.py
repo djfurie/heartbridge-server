@@ -33,7 +33,10 @@ class ConnectionManager:
         logging.debug("Scheduling a broadcast")
         loop = asyncio.get_running_loop()
         for conn_id in connection_ids:
-            loop.create_task(self.active_connections[conn_id].send_text(payload))
+            # Does this websocket client belong to this replica?
+            if conn_id in self.active_connections:
+                # Send the message
+                loop.create_task(self.active_connections[conn_id].send_text(payload))
 
     async def handle_message(self, websocket: WebSocket, payload: str, background_tasks: BackgroundTasks):
         try:
@@ -45,11 +48,11 @@ class ConnectionManager:
 
             ret_val = None
             if action == 'publish':
-                connection_ids, broadcast_payload = hbs.publish_handler(payload)
+                connection_ids, broadcast_payload = await hbs.publish_handler(payload)
                 self.broadcast(connection_ids, broadcast_payload)
                 ret_val = broadcast_payload
             elif action == 'subscribe':
-                connection_ids, broadcast_payload = hbs.subscribe_handler(connection_id, payload)
+                connection_ids, broadcast_payload = await hbs.subscribe_handler(connection_id, payload)
                 logging.debug("%s - %s", connection_ids, broadcast_payload)
                 self.broadcast(connection_ids, broadcast_payload)
             elif action == 'register':

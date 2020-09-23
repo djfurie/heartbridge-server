@@ -3,3 +3,4 @@ websockets
 fastapi
 uvicorn
 redis
+aioredis
