@@ -128,11 +128,6 @@ class HeartBridgeServer:
         # Set up subscriptions to expire after 24 hours
         expiration_time = int(datetime.datetime.now().timestamp()) + SECS_IN_DAY
 
-        # TODO: Store this subscription somewhere...
-        subscription = {'performance_id': performance_id,
-                        'connection_id': connection_id,
-                        'expiration': expiration_time}
-
         subscribers = self._storage.add_subscription(performance_id, connection_id, expiration_time)
         subscribers = [x[0] for x in subscribers]
         return subscribers, json.dumps({
