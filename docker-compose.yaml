@@ -1,8 +1,26 @@
 version: '3'
 services:
-  api:
-    build: .
+  traefik:
+    image: "traefik:2.3"
+    container_name: "traefik"
+    command:
+      #- "--log.level=DEBUG"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.heartbridge.address=:8000"
     ports:
-      - "8000:80"
+      - "8000:8000"
+      - "8080:8080"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+
+  heartbridge:
+    build: .
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.heartbridge.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.heartbridge.entrypoints=heartbridge"
+
   redis:
     image: "redis:alpine"
