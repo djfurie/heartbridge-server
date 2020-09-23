@@ -5,10 +5,8 @@ import random
 import logging
 import asyncio
 import aioredis
-from typing import List, Dict, Tuple, Optional
-
-LOGGING_FORMAT = '%(asctime)s :: %(name)s (%(levelname)s) -- %(message)s'
-logging.basicConfig(format=LOGGING_FORMAT, level=logging.WARNING)
+from typing import List, Dict, Tuple, Optional, Callable, Awaitable, Any
+from .connection import HeartBridgeConnection, HeartBridgeDisconnect
 
 # Secret key for signing performer tokens
 HEARTBRIDGE_SECRET = "hbsecretkey"
@@ -16,6 +14,54 @@ HEARTBRIDGE_SECRET = "hbsecretkey"
 # Number of seconds in a day
 SECS_IN_HOUR = 60 * 60
 SECS_IN_DAY = 24 * SECS_IN_HOUR
+
+
+class HeartBridgeConnectionManager:
+    ConnectCallBackType = Callable[[HeartBridgeConnection], Awaitable[None]]
+    DisconnectCallBackType = Callable[[HeartBridgeConnection], Awaitable[None]]
+    MessageCallBackType = Callable[[HeartBridgeConnection, Any], Awaitable[None]]
+
+    def __init__(self,
+                 on_connect_handler: ConnectCallBackType = None,
+                 on_disconnect_handler: DisconnectCallBackType = None,
+                 on_message_handler: MessageCallBackType = None):
+        # Initialize the list of connections
+        self._active_connections: Dict[str, HeartBridgeConnection] = {}
+
+        # Store the callbacks
+        self._on_connect_handler: HeartBridgeConnectionManager.ConnectCallBackType = on_connect_handler
+        self._on_disconnect_handler: HeartBridgeConnectionManager.DisconnectCallBackType = on_disconnect_handler
+        self._on_message_handler: HeartBridgeConnectionManager.MessageCallBackType = on_message_handler
+
+    async def add_connection(self, conn: HeartBridgeConnection):
+        # Store this connection in the dict of active connections
+        self._active_connections[str(conn)] = conn
+
+        # Accept the websocket connection
+        await conn.accept()
+        logging.debug("Connected: %s", conn)
+
+        # Fire the on_connect_handler callback
+        if self._on_connect_handler:
+            await self._on_connect_handler(conn)
+
+        # Start up the listen loop
+        try:
+            await self._listen_forever(conn)
+        except HeartBridgeDisconnect:
+            # The connection has been terminated
+            logging.debug("Disconnected: %s", conn)
+            if self._on_disconnect_handler:
+                await self._on_disconnect_handler(conn)
+
+    async def _listen_forever(self, conn: HeartBridgeConnection):
+        # Listen forever
+        while True:
+            payload = await conn.receive()
+            logging.debug("%s [RX]: %s", conn, payload)
+            #
+            if self._on_message_handler:
+                await self._on_message_handler(conn, payload)
 
 
 class PerformanceId:
@@ -110,6 +156,10 @@ class HeartBridgeServer:
     def __init__(self):
         self._storage = HeartBridgeStorage()
         self._broker = PerformanceBroker()
+        self._connection_mgr = HeartBridgeConnectionManager()
+
+    async def add_connection(self, conn: HeartBridgeConnection):
+        await self._connection_mgr.add_connection(conn)
 
     def connect_handler(self, connection_id: str):
         logging.info("Connected: %s", connection_id)

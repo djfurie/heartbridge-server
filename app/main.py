@@ -1,13 +1,16 @@
 import asyncio
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks
 from typing import List, Dict
-import heartbridgeserver
+from heartbridge import HeartBridgeServer, HeartBridgeConnection
 import json
 import logging
 
+LOGGING_FORMAT = '%(asctime)s :: %(name)s (%(levelname)s) -- %(message)s'
+logging.basicConfig(format=LOGGING_FORMAT, level=logging.DEBUG)
+
 # High level class instantiations
 app = FastAPI()
-hbs = heartbridgeserver.HeartBridgeServer()
+hbserver = HeartBridgeServer()
 
 
 class ConnectionManager:
@@ -22,11 +25,11 @@ class ConnectionManager:
         self.active_connections[connection_id] = websocket
 
         # Let the HeartBridgeServer know that a new client has connected
-        hbs.connect_handler(connection_id)
+        hbserver.connect_handler(connection_id)
 
     def disconnect(self, websocket: WebSocket):
         connection_id = websocket.headers['sec-websocket-key']
-        hbs.disconnect_handler(connection_id)
+        hbserver.disconnect_handler(connection_id)
         self.active_connections.pop(connection_id)
 
     def broadcast(self, connection_ids, payload):
@@ -38,7 +41,7 @@ class ConnectionManager:
                 # Send the message
                 loop.create_task(self.active_connections[conn_id].send_text(payload))
 
-    async def handle_message(self, websocket: WebSocket, payload: str, background_tasks: BackgroundTasks):
+    async def handle_message(self, websocket: WebSocket, payload: str):
         try:
             connection_id = websocket.headers['sec-websocket-key']
             p = json.loads(payload)
@@ -48,17 +51,17 @@ class ConnectionManager:
 
             ret_val = None
             if action == 'publish':
-                connection_ids, broadcast_payload = await hbs.publish_handler(payload)
+                connection_ids, broadcast_payload = await hbserver.publish_handler(payload)
                 self.broadcast(connection_ids, broadcast_payload)
                 ret_val = broadcast_payload
             elif action == 'subscribe':
-                connection_ids, broadcast_payload = await hbs.subscribe_handler(connection_id, payload)
+                connection_ids, broadcast_payload = await hbserver.subscribe_handler(connection_id, payload)
                 logging.debug("%s - %s", connection_ids, broadcast_payload)
                 self.broadcast(connection_ids, broadcast_payload)
             elif action == 'register':
-                ret_val = hbs.register_handler(payload)
+                ret_val = hbserver.register_handler(payload)
             elif action == 'update':
-                ret_val = hbs.update_handler(payload)
+                ret_val = hbserver.update_handler(payload)
             else:
                 ret_val = json.dumps("Invalid action!")
 
@@ -76,13 +79,8 @@ manager = ConnectionManager()
 
 
 @app.websocket("/")
-async def websocket_endpoint(websocket: WebSocket, background_tasks: BackgroundTasks):
-    await manager.connect(websocket)
-
-    try:
-        while True:
-            data = await websocket.receive_text()
-            await manager.handle_message(websocket, data, background_tasks)
-
-    except WebSocketDisconnect:
-        manager.disconnect(websocket)
+async def websocket_endpoint(websocket: WebSocket):
+    logging.error("TEST TEST")
+    logging.debug("DEBUG DEBUG")
+    conn = HeartBridgeConnection(websocket)
+    await hbserver.add_connection(conn)
