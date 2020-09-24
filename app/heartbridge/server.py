@@ -5,8 +5,11 @@ import logging
 import asyncio
 import aioredis
 from typing import List, Dict, Tuple, Optional, Callable, Awaitable, Any
+
+from . import utils
 from .connection import HeartBridgeConnection, HeartBridgeDisconnect
-from .payload_types import HeartBridgeBasePayload, HeartBridgePayloadValidationException
+from .payload_types import HeartBridgeBasePayload, HeartBridgePayloadValidationException, HeartBridgeRegisterPayload
+from .token_issuer import PerformanceTokenIssuer
 
 
 class HeartBridgeConnectionManager:
@@ -97,6 +100,15 @@ class HeartBridgeServer:
 
         logging.info("[%s] Handle Action: %s", conn, p.json())
 
+        if p.action == "publish":
+            pass
+        elif p.action == "subscribe":
+            pass
+        elif p.action == "register":
+            await self.register_handler(conn, payload)
+        elif p.action == "update":
+            pass
+
     @staticmethod
     def _return_exception(conn: HeartBridgeConnection, e: Exception):
         logging.error("[%s] Exception: %s", conn, e)
@@ -110,7 +122,7 @@ class HeartBridgeServer:
         logging.info("Subscribe: conn_id: %s -> perf_id: %s", connection_id, performance_id)
 
         # Set up subscriptions to expire after 24 hours
-        expiration_time = int(datetime.datetime.now().timestamp()) + SECS_IN_DAY
+        expiration_time = int(datetime.datetime.now().timestamp()) + utils.SECS_IN_DAY
 
         subscribers = self._storage.add_subscription(performance_id, connection_id, expiration_time)
         await self._broker.log_subscribe(performance_id)
@@ -121,19 +133,15 @@ class HeartBridgeServer:
             "active_subcriptions": len(subscribers)
         })
 
-    def register_handler(self, payload: str) -> str:
-        # Generate a new performance id to use
-        performance_id = PerformanceId.generate()
-
-        # TODO: Validate that the performance id isn't a duplicate
-
+    async def register_handler(self, conn: HeartBridgeConnection, payload: Any):
+        # Attempt to unpack the payload as a Register command
         try:
-            token = PerformanceToken.from_json(payload)
-            token.performance_id = performance_id
-            token_str = token.generate()
-        except PerformanceToken.PerformanceTokenException as e:
-            logging.warning("Invalid token data: %s", e)
-            return json.dumps({"error": str(e)})
+            p = HeartBridgeRegisterPayload(**payload)
+        except HeartBridgePayloadValidationException as e:
+            self._return_exception(conn, e)
+            return
+
+        performance_id, token_str = PerformanceTokenIssuer.register_performance(p)
 
         return_json = {
             'action': 'register_return',
@@ -141,7 +149,7 @@ class HeartBridgeServer:
             'performance_id': performance_id
         }
 
-        return json.dumps(return_json)
+        await conn.send(return_json)
 
     def update_handler(self, payload: str) -> str:
         p = json.loads(payload)
