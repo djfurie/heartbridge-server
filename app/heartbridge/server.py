@@ -8,8 +8,9 @@ from typing import List, Dict, Tuple, Optional, Callable, Awaitable, Any
 
 from . import utils
 from .connection import HeartBridgeConnection, HeartBridgeDisconnect
-from .payload_types import HeartBridgeBasePayload, HeartBridgePayloadValidationException, HeartBridgeRegisterPayload
-from .token_issuer import PerformanceTokenIssuer
+from .payload_types import HeartBridgeBasePayload, HeartBridgePayloadValidationException, HeartBridgeRegisterPayload, \
+    HeartBridgeUpdatePayload
+from .token_issuer import PerformanceTokenIssuer, PerformanceToken
 
 
 class HeartBridgeConnectionManager:
@@ -107,13 +108,57 @@ class HeartBridgeServer:
         elif p.action == "register":
             await self.register_handler(conn, payload)
         elif p.action == "update":
-            pass
+            await self.update_handler(conn, payload)
 
     @staticmethod
     def _return_exception(conn: HeartBridgeConnection, e: Exception):
         logging.error("[%s] Exception: %s", conn, e)
         error = {"error": str(e)}
         asyncio.get_running_loop().create_task(conn.send(error))
+
+    async def register_handler(self, conn: HeartBridgeConnection, payload: Any):
+        # Attempt to unpack the payload as a Register command
+        try:
+            p = HeartBridgeRegisterPayload(**payload)
+        except HeartBridgePayloadValidationException as e:
+            self._return_exception(conn, e)
+            return
+
+        # Get a new performance id and token from the token issuer
+        performance_id, token_str = PerformanceTokenIssuer.register_performance(p)
+
+        # Pack and return the token and performance id to the requester
+        return_json = {
+            'action': 'register_return',
+            'token': token_str.decode('utf-8'),
+            'performance_id': performance_id
+        }
+
+        await conn.send(return_json)
+
+    async def update_handler(self, conn: HeartBridgeConnection, payload: Any):
+        # Attempt to unpack the payload as an Update command
+        try:
+            p = HeartBridgeUpdatePayload(**payload)
+        except HeartBridgePayloadValidationException as e:
+            self._return_exception(conn, e)
+            return
+
+        logging.info("Update: %s", p)
+
+        try:
+            performance_id, token_str = PerformanceTokenIssuer.update_performance_token(p)
+        except PerformanceToken.PerformanceTokenException as e:
+            self._return_exception(conn, e)
+            return
+
+        return_json = {
+            "action": "register_return",
+            "token": token_str.decode("utf-8"),
+            "performance_id": performance_id
+        }
+
+        await conn.send(return_json)
 
     async def subscribe_handler(self, connection_id: str, payload: str) -> Tuple[List[str], str]:
         p = json.loads(payload)
@@ -132,58 +177,6 @@ class HeartBridgeServer:
             "performance_id": performance_id,
             "active_subcriptions": len(subscribers)
         })
-
-    async def register_handler(self, conn: HeartBridgeConnection, payload: Any):
-        # Attempt to unpack the payload as a Register command
-        try:
-            p = HeartBridgeRegisterPayload(**payload)
-        except HeartBridgePayloadValidationException as e:
-            self._return_exception(conn, e)
-            return
-
-        performance_id, token_str = PerformanceTokenIssuer.register_performance(p)
-
-        return_json = {
-            'action': 'register_return',
-            'token': token_str.decode('utf-8'),
-            'performance_id': performance_id
-        }
-
-        await conn.send(return_json)
-
-    def update_handler(self, payload: str) -> str:
-        p = json.loads(payload)
-
-        logging.info("Update: %s", p)
-
-        # Check validity of the provided token
-        try:
-            token = PerformanceToken.from_token(p['token'], verify_nbf=False)
-        except jwt.exceptions.DecodeError as e:
-            logging.error(e)
-            return json.dumps({"error": str(e)})
-
-        # Use any of the provided fields to update the token (performance_id must remain the same)
-        if 'artist' in p:
-            token.artist = p['artist']
-        if 'title' in p:
-            token.title = p['title']
-        if 'performance_date' in p:
-            token.performance_date = int(p['performance_date'])
-
-        try:
-            token_str = token.generate()
-        except PerformanceToken.PerformanceTokenException as e:
-            logging.warning("Invalid token data: %s", e)
-            return json.dumps({"error": str(e)})
-
-        return_json = {
-            "action": "register_return",
-            "token": token_str.decode("utf-8"),
-            "performance_id": token.performance_id
-        }
-
-        return json.dumps(return_json)
 
     async def publish_handler(self, payload: str) -> Tuple[List[str], str]:
         p = json.loads(payload)

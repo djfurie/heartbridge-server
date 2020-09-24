@@ -4,7 +4,7 @@ import jwt
 import json
 import datetime
 import os
-from .payload_types import HeartBridgeRegisterPayload
+from .payload_types import HeartBridgeRegisterPayload, HeartBridgeUpdatePayload
 from typing import Union
 
 # Secret key for signing performer tokens
@@ -23,6 +23,22 @@ class PerformanceTokenIssuer:
         # Generate the token string
         return token.performance_id, token.generate()
 
+    @staticmethod
+    def update_performance_token(p: HeartBridgeUpdatePayload) -> [str, str]:
+        # Validate the existing token
+        token = PerformanceToken.from_token(p.token, verify_nbf=False)
+
+        # Update any of the fields that were set
+        if p.artist:
+            token.artist = p.artist
+        if p.title:
+            token.title = p.title
+        if p.performance_date:
+            token.performance_date = p.performance_date
+
+        # Return the existing performance id and the new token string
+        return token.performance_id, token.generate()
+
 
 class PerformanceToken:
     class PerformanceTokenException(Exception):
@@ -36,6 +52,8 @@ class PerformanceToken:
                  performance_id: str = ""):
         self.artist: str = artist
         self.title: str = title
+        if type(performance_date) is int:
+            performance_date = datetime.datetime.fromtimestamp(performance_date, tz=datetime.timezone.utc)
         self.performance_date: datetime.datetime = performance_date
         self.performance_id: str = performance_id
 
@@ -60,7 +78,10 @@ class PerformanceToken:
     @classmethod
     def from_token(cls, data: str, verify: bool = True, verify_nbf: bool = True, key=HEARTBRIDGE_SECRET):
         # Attempt to verify/decode the token
-        token_data = jwt.decode(data, verify=verify, options={'verify_nbf': verify_nbf}, key=key)
+        try:
+            token_data = jwt.decode(data, verify=verify, options={'verify_nbf': verify_nbf}, key=key)
+        except jwt.exceptions.DecodeError as e:
+            raise PerformanceToken.PerformanceTokenException from e
         return PerformanceToken.from_dict(token_data)
 
     def generate(self):
