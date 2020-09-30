@@ -1,7 +1,8 @@
 from pydantic import BaseModel, validator, ValidationError
 from typing import Optional
 import datetime
-from .performance import PerformanceTokenIssuer
+
+from .utils import PerformanceId
 
 HeartBridgePayloadValidationException = ValidationError
 
@@ -18,6 +19,12 @@ def time_cannot_be_in_past(cls, v):
 def max_str_len(cls, v, field):
     if len(v) > 64:
         raise ValueError(f"{field} length is > 64")
+    return v
+
+
+def performance_id_is_valid(cls, v):
+    if not PerformanceId.is_valid(v):
+        raise ValueError("Performance ID is invalid")
     return v
 
 
@@ -45,3 +52,9 @@ class HeartBridgeUpdatePayload(HeartBridgeRegisterPayload):
     title: Optional[str] = None
     performance_date: Optional[datetime.datetime]
     token: str
+
+
+class HeartBridgeSubscribePayload(HeartBridgeBasePayload):
+    performance_id: str
+
+    _performance_id_is_valid = validator("performance_id", allow_reuse=True)(performance_id_is_valid)

@@ -9,8 +9,9 @@ from typing import List, Dict, Tuple, Optional, Callable, Awaitable, Any
 from . import utils
 from .connection import HeartBridgeConnection, HeartBridgeDisconnect
 from .payload_types import HeartBridgeBasePayload, HeartBridgePayloadValidationException, HeartBridgeRegisterPayload, \
-    HeartBridgeUpdatePayload
+    HeartBridgeUpdatePayload, HeartBridgeSubscribePayload
 from .token_issuer import PerformanceTokenIssuer, PerformanceToken
+from .performance import Performance
 
 
 class HeartBridgeConnectionManager:
@@ -76,20 +77,19 @@ class HeartBridgeConnectionManager:
 
 class HeartBridgeServer:
     def __init__(self):
-        self._storage = HeartBridgeStorage()
-        self._broker = PerformanceBroker()
         self._connection_mgr = HeartBridgeConnectionManager(on_connect_handler=self.on_connect_handler,
                                                             on_disconnect_handler=self.on_disconnect_handler,
                                                             on_message_handler=self.on_message_handler)
+        self._performances: Dict[str, Performance] = {}
 
     async def add_connection(self, conn: HeartBridgeConnection):
         await self._connection_mgr.add_connection(conn)
 
     async def on_connect_handler(self, conn: HeartBridgeConnection):
-        logging.error("on_connect_handler not implemented")
+        logging.debug("on_connect_handler not implemented")
 
     async def on_disconnect_handler(self, conn: HeartBridgeConnection):
-        logging.error("on_disconnect_handler not implemented")
+        logging.debug("on_disconnect_handler not implemented")
 
     async def on_message_handler(self, conn: HeartBridgeConnection, payload: Any):
         """ Dispatch messages from connected clients to the appropriate action handler """
@@ -104,7 +104,7 @@ class HeartBridgeServer:
         if p.action == "publish":
             pass
         elif p.action == "subscribe":
-            pass
+            await self.subscribe_handler(conn, payload)
         elif p.action == "register":
             await self.register_handler(conn, payload)
         elif p.action == "update":
@@ -146,12 +146,14 @@ class HeartBridgeServer:
 
         logging.info("Update: %s", p)
 
+        # Request the updated token
         try:
             performance_id, token_str = PerformanceTokenIssuer.update_performance_token(p)
         except PerformanceToken.PerformanceTokenException as e:
             self._return_exception(conn, e)
             return
 
+        # Pack and return the new token and the existing performance id
         return_json = {
             "action": "register_return",
             "token": token_str.decode("utf-8"),
@@ -160,23 +162,36 @@ class HeartBridgeServer:
 
         await conn.send(return_json)
 
-    async def subscribe_handler(self, connection_id: str, payload: str) -> Tuple[List[str], str]:
-        p = json.loads(payload)
-        performance_id = p['performance_id']
+    async def subscribe_handler(self, conn: HeartBridgeConnection, payload: Any):
+        # Attempt to unpack the payload as a Subscribe command
+        try:
+            p = HeartBridgeSubscribePayload(**payload)
+        except HeartBridgePayloadValidationException as e:
+            self._return_exception(conn, e)
+            return
 
-        logging.info("Subscribe: conn_id: %s -> perf_id: %s", connection_id, performance_id)
+        # Check if this node is already tracking the given performance
+        if p.performance_id not in self._performances:
+            # Create the performance
+            logging.info("Creating performance: %s", p.performance_id)
+            self._performances[p.performance_id] = Performance()
 
-        # Set up subscriptions to expire after 24 hours
-        expiration_time = int(datetime.datetime.now().timestamp()) + utils.SECS_IN_DAY
-
-        subscribers = self._storage.add_subscription(performance_id, connection_id, expiration_time)
-        await self._broker.log_subscribe(performance_id)
-        await self._broker.subscribe(performance_id)
-        return subscribers, json.dumps({
-            "action": "subscriber_count_update",
-            "performance_id": performance_id,
-            "active_subcriptions": len(subscribers)
-        })
+        # p = json.loads(payload)
+        # performance_id = p['performance_id']
+        #
+        # logging.info("Subscribe: conn_id: %s -> perf_id: %s", connection_id, performance_id)
+        #
+        # # Set up subscriptions to expire after 24 hours
+        # expiration_time = int(datetime.datetime.now().timestamp()) + utils.SECS_IN_DAY
+        #
+        # subscribers = self._storage.add_subscription(performance_id, connection_id, expiration_time)
+        # await self._broker.log_subscribe(performance_id)
+        # await self._broker.subscribe(performance_id)
+        # return subscribers, json.dumps({
+        #     "action": "subscriber_count_update",
+        #     "performance_id": performance_id,
+        #     "active_subcriptions": len(subscribers)
+        # })
 
     async def publish_handler(self, payload: str) -> Tuple[List[str], str]:
         p = json.loads(payload)

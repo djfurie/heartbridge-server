@@ -6,6 +6,7 @@ import datetime
 import os
 from .payload_types import HeartBridgeRegisterPayload, HeartBridgeUpdatePayload
 from typing import Union
+from .utils import PerformanceId
 
 # Secret key for signing performer tokens
 HEARTBRIDGE_SECRET = os.environ.setdefault("HEARTBRIDGE_SECRET", "hbsecretkey")
@@ -54,6 +55,7 @@ class PerformanceToken:
         self.title: str = title
         if type(performance_date) is int:
             performance_date = datetime.datetime.fromtimestamp(performance_date, tz=datetime.timezone.utc)
+
         self.performance_date: datetime.datetime = performance_date
         self.performance_id: str = performance_id
 
@@ -81,7 +83,7 @@ class PerformanceToken:
         try:
             token_data = jwt.decode(data, verify=verify, options={'verify_nbf': verify_nbf}, key=key)
         except jwt.exceptions.DecodeError as e:
-            raise PerformanceToken.PerformanceTokenException from e
+            raise PerformanceToken.PerformanceTokenException(f"Token is invalid! {str(e)}") from e
         return PerformanceToken.from_dict(token_data)
 
     def generate(self):
@@ -112,30 +114,3 @@ class PerformanceToken:
                            HEARTBRIDGE_SECRET,
                            algorithm='HS256')
         return token
-
-
-class PerformanceId:
-    # Parameters for generating performance ids
-    VALID_PERFORMANCE_ID_CHARACTERS = "ABCDEFGHJKLMNPQRSTXYZ23456789"
-    PERFORMANCE_ID_LENGTH = 6
-
-    # Helper function for generation of performance_ids
-    @staticmethod
-    def generate() -> str:
-        performance_id = ""
-        while len(performance_id) < PerformanceId.PERFORMANCE_ID_LENGTH:
-            performance_id += PerformanceId.VALID_PERFORMANCE_ID_CHARACTERS[
-                random.randint(0, len(PerformanceId.VALID_PERFORMANCE_ID_CHARACTERS) - 1)]
-        return performance_id
-
-    # Helper function for validating a performance_id
-    @staticmethod
-    def is_valid(performance_id: str) -> bool:
-        if len(performance_id) != PerformanceId.PERFORMANCE_ID_LENGTH:
-            return False
-
-        for c in performance_id:
-            if c not in PerformanceId.VALID_PERFORMANCE_ID_CHARACTERS:
-                return False
-
-        return True
