@@ -9,7 +9,7 @@ from typing import List, Dict, Tuple, Optional, Callable, Awaitable, Any
 from . import utils
 from .connection import HeartBridgeConnection, HeartBridgeDisconnect
 from .payload_types import HeartBridgeBasePayload, HeartBridgePayloadValidationException, HeartBridgeRegisterPayload, \
-    HeartBridgeUpdatePayload, HeartBridgeSubscribePayload
+    HeartBridgeUpdatePayload, HeartBridgeSubscribePayload, HeartBridgePublishPayload
 from .token_issuer import PerformanceTokenIssuer, PerformanceToken
 from .performance import Performance
 
@@ -176,41 +176,36 @@ class HeartBridgeServer:
             logging.info("Creating performance: %s", p.performance_id)
             self._performances[p.performance_id] = Performance()
 
-        # p = json.loads(payload)
-        # performance_id = p['performance_id']
-        #
-        # logging.info("Subscribe: conn_id: %s -> perf_id: %s", connection_id, performance_id)
-        #
-        # # Set up subscriptions to expire after 24 hours
-        # expiration_time = int(datetime.datetime.now().timestamp()) + utils.SECS_IN_DAY
-        #
-        # subscribers = self._storage.add_subscription(performance_id, connection_id, expiration_time)
-        # await self._broker.log_subscribe(performance_id)
-        # await self._broker.subscribe(performance_id)
-        # return subscribers, json.dumps({
-        #     "action": "subscriber_count_update",
-        #     "performance_id": performance_id,
-        #     "active_subcriptions": len(subscribers)
-        # })
+        logging.debug("Subscribe: %s - %s", conn, p.performance_id)
+        performance = self._performances[p.performance_id]
 
-    async def publish_handler(self, payload: str) -> Tuple[List[str], str]:
-        p = json.loads(payload)
+        # TODO: Add the current connection to the Performance's subscribers list
+
+    async def publish_handler(self, conn: HeartBridgeConnection, payload: Any):
+        # Attempt to unpack the payload as a Publish command
+        try:
+            p = HeartBridgePublishPayload(**payload)
+        except HeartBridgePayloadValidationException as e:
+            self._return_exception(conn, e)
+            return
 
         # Check validity of provided token
         try:
-            token = PerformanceToken.from_token(p['token'])
-        except jwt.exceptions.DecodeError as e:
-            logging.error(e)
-            return [], json.dumps({"error": str(e)})
+            token = PerformanceToken.from_token(p.token)
+        except PerformanceToken.PerformanceTokenException as e:
+            self._return_exception(conn, e)
+            return
 
-        logging.debug("Publish: %s", token.performance_id)
+        # Check if this node is already tracking the given performance
+        if token.performance_id not in self._performances:
+            # Create the performance
+            logging.info("Creating performance: %s", token.performance_id)
+            self._performances[token.performance_id] = Performance()
 
-        await self._broker.publish(token.performance_id, p['heartrate'])
-        subs = self._storage.get_subscriptions(token.performance_id)
-        return subs, json.dumps({
-            "action": "heartrate_update",
-            "heartrate": p['heartrate']
-        })
+        logging.debug("Publish: %s - %d", token.performance_id, p.heartrate)
+        performance = self._performances[token.performance_id]
+
+        # TODO: Publish the heartrate to the Performance
 
 
 class HeartBridgeStorage:

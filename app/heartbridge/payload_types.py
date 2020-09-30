@@ -58,3 +58,8 @@ class HeartBridgeSubscribePayload(HeartBridgeBasePayload):
     performance_id: str
 
     _performance_id_is_valid = validator("performance_id", allow_reuse=True)(performance_id_is_valid)
+
+
+class HeartBridgePublishPayload(HeartBridgeBasePayload):
+    heartrate: int
+    token: str
