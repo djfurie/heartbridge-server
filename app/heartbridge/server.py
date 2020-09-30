@@ -96,7 +96,7 @@ class HeartBridgeServer:
         try:
             p = HeartBridgeBasePayload(**payload)
         except HeartBridgePayloadValidationException as e:
-            self._return_exception(conn, e)
+            self._ws_return_exception(conn, e)
             return
 
         logging.info("[%s] Handle Action: %s", conn, p.json())
@@ -106,26 +106,50 @@ class HeartBridgeServer:
         elif p.action == "subscribe":
             await self.subscribe_handler(conn, payload)
         elif p.action == "register":
-            await self.register_handler(conn, payload)
+            try:
+                # Attempt to unpack the payload as a Register command
+                p = HeartBridgeRegisterPayload(**payload)
+            except HeartBridgePayloadValidationException as e:
+                self._ws_return_exception(conn, e)
+                return
+
+            # Dispatch to the handler
+            ret_val = await self.register_handler(p)
+
+            # Return the response via websocket
+            await conn.send(ret_val)
         elif p.action == "update":
-            await self.update_handler(conn, payload)
+            # Attempt to unpack the payload as an Update command
+            try:
+                p = HeartBridgeUpdatePayload(**payload)
+            except HeartBridgePayloadValidationException as e:
+                self._ws_return_exception(conn, e)
+                return
+
+            # Dispatch to the handler
+            try:
+                ret_val = await self.update_handler(p)
+            except PerformanceToken.PerformanceTokenException as e:
+                self._ws_return_exception(conn, e)
+                return
+
+            # Return the response via websocket
+            await conn.send(ret_val)
 
     @staticmethod
-    def _return_exception(conn: HeartBridgeConnection, e: Exception):
+    def _ws_return_exception(conn: HeartBridgeConnection, e: Exception):
         logging.error("[%s] Exception: %s", conn, e)
         error = {"error": str(e)}
         asyncio.get_running_loop().create_task(conn.send(error))
 
-    async def register_handler(self, conn: HeartBridgeConnection, payload: Any):
-        # Attempt to unpack the payload as a Register command
-        try:
-            p = HeartBridgeRegisterPayload(**payload)
-        except HeartBridgePayloadValidationException as e:
-            self._return_exception(conn, e)
-            return
+    @staticmethod
+    def _format_exception(e: Exception):
+        logging.error("Exception: %s", e)
+        return {"error": str(e)}
 
+    async def register_handler(self, payload: HeartBridgeRegisterPayload):
         # Get a new performance id and token from the token issuer
-        performance_id, token_str = PerformanceTokenIssuer.register_performance(p)
+        performance_id, token_str = PerformanceTokenIssuer.register_performance(payload)
 
         # Pack and return the token and performance id to the requester
         return_json = {
@@ -134,24 +158,16 @@ class HeartBridgeServer:
             'performance_id': performance_id
         }
 
-        await conn.send(return_json)
+        return return_json
 
-    async def update_handler(self, conn: HeartBridgeConnection, payload: Any):
-        # Attempt to unpack the payload as an Update command
+    async def update_handler(self, payload: HeartBridgeUpdatePayload):
+
+        logging.info("Update: %s", payload)
+
         try:
-            p = HeartBridgeUpdatePayload(**payload)
-        except HeartBridgePayloadValidationException as e:
-            self._return_exception(conn, e)
-            return
-
-        logging.info("Update: %s", p)
-
-        # Request the updated token
-        try:
-            performance_id, token_str = PerformanceTokenIssuer.update_performance_token(p)
+            performance_id, token_str = PerformanceTokenIssuer.update_performance_token(payload)
         except PerformanceToken.PerformanceTokenException as e:
-            self._return_exception(conn, e)
-            return
+            return self._format_exception(e)
 
         # Pack and return the new token and the existing performance id
         return_json = {
@@ -160,14 +176,14 @@ class HeartBridgeServer:
             "performance_id": performance_id
         }
 
-        await conn.send(return_json)
+        return return_json
 
     async def subscribe_handler(self, conn: HeartBridgeConnection, payload: Any):
         # Attempt to unpack the payload as a Subscribe command
         try:
             p = HeartBridgeSubscribePayload(**payload)
         except HeartBridgePayloadValidationException as e:
-            self._return_exception(conn, e)
+            self._ws_return_exception(conn, e)
             return
 
         # Check if this node is already tracking the given performance
@@ -186,14 +202,14 @@ class HeartBridgeServer:
         try:
             p = HeartBridgePublishPayload(**payload)
         except HeartBridgePayloadValidationException as e:
-            self._return_exception(conn, e)
+            self._ws_return_exception(conn, e)
             return
 
         # Check validity of provided token
         try:
             token = PerformanceToken.from_token(p.token)
         except PerformanceToken.PerformanceTokenException as e:
-            self._return_exception(conn, e)
+            self._ws_return_exception(conn, e)
             return
 
         # Check if this node is already tracking the given performance

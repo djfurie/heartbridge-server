@@ -33,7 +33,7 @@ class HeartBridgeBasePayload(BaseModel):
 
     @validator("action")
     def action_is_one_of(cls, v):
-        if v not in ['register', 'subscribe', 'publish', 'update']:
+        if v not in ['register', 'subscribe', 'publish', 'update', 'register_return']:
             raise ValueError("Invalid action specified")
         return v
 
@@ -63,3 +63,10 @@ class HeartBridgeSubscribePayload(HeartBridgeBasePayload):
 class HeartBridgePublishPayload(HeartBridgeBasePayload):
     heartrate: int
     token: str
+
+
+class HeartBridgeRegisterReturnPayload(HeartBridgeBasePayload):
+    token: str
+    performance_id: str
+
+    _performance_id_is_valid = validator("performance_id", allow_reuse=True)(performance_id_is_valid)

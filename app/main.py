@@ -1,12 +1,14 @@
 import asyncio
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks
+from fastapi import FastAPI, WebSocket, HTTPException
 from typing import List, Dict
 from heartbridge import HeartBridgeServer, HeartBridgeConnection
+from heartbridge.payload_types import HeartBridgeRegisterReturnPayload, HeartBridgeRegisterPayload, \
+    HeartBridgeUpdatePayload
 import json
 import logging
 
 LOGGING_FORMAT = '%(asctime)s :: %(name)s (%(levelname)s) -- %(message)s'
-logging.basicConfig(format=LOGGING_FORMAT, level=logging.INFO)
+logging.basicConfig(format=LOGGING_FORMAT, level=logging.DEBUG)
 
 # High level class instantiations
 app = FastAPI()
@@ -82,3 +84,16 @@ manager = ConnectionManager()
 async def websocket_endpoint(websocket: WebSocket):
     conn = HeartBridgeConnection(websocket)
     await hbserver.add_connection(conn)
+
+
+@app.post("/register", response_model=HeartBridgeRegisterReturnPayload)
+async def rest_register_endpoint(payload: HeartBridgeRegisterPayload):
+    return await hbserver.register_handler(payload)
+
+
+@app.post("/update", response_model=HeartBridgeRegisterReturnPayload)
+async def rest_update_endpoint(payload: HeartBridgeUpdatePayload):
+    ret = await hbserver.update_handler(payload)
+    if "error" in ret:
+        raise HTTPException(status_code=400, detail=ret)
+    return ret
