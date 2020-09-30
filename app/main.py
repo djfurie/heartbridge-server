@@ -88,7 +88,10 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @app.post("/register", response_model=HeartBridgeRegisterReturnPayload)
 async def rest_register_endpoint(payload: HeartBridgeRegisterPayload):
-    return await hbserver.register_handler(payload)
+    ret = await hbserver.register_handler(payload)
+    if "error" in ret:
+        raise HTTPException(status_code=400, detail=ret)
+    return ret
 
 
 @app.post("/update", response_model=HeartBridgeRegisterReturnPayload)

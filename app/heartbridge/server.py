@@ -149,7 +149,10 @@ class HeartBridgeServer:
 
     async def register_handler(self, payload: HeartBridgeRegisterPayload):
         # Get a new performance id and token from the token issuer
-        performance_id, token_str = PerformanceTokenIssuer.register_performance(payload)
+        try:
+            performance_id, token_str = PerformanceTokenIssuer.register_performance(payload)
+        except PerformanceToken.PerformanceTokenException as e:
+            return self._format_exception(e)
 
         # Pack and return the token and performance id to the requester
         return_json = {
