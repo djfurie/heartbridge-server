@@ -1,5 +1,5 @@
 from pydantic import BaseModel, validator, ValidationError
-from typing import Optional
+from typing import Optional, Literal
 import datetime
 
 from .utils import PerformanceId
@@ -29,7 +29,7 @@ def performance_id_is_valid(cls, v):
 
 
 class HeartBridgeBasePayload(BaseModel):
-    action: str
+    action: Literal['register', 'subscribe', 'publish', 'update', 'register_return']
 
     @validator("action")
     def action_is_one_of(cls, v):
@@ -39,6 +39,7 @@ class HeartBridgeBasePayload(BaseModel):
 
 
 class HeartBridgeRegisterPayload(HeartBridgeBasePayload):
+    action: Literal['register']
     artist: str
     title: str
     performance_date: datetime.datetime
@@ -48,6 +49,7 @@ class HeartBridgeRegisterPayload(HeartBridgeBasePayload):
 
 
 class HeartBridgeUpdatePayload(HeartBridgeRegisterPayload):
+    action: Literal['update']
     artist: Optional[str] = None
     title: Optional[str] = None
     performance_date: Optional[datetime.datetime]
@@ -55,17 +57,20 @@ class HeartBridgeUpdatePayload(HeartBridgeRegisterPayload):
 
 
 class HeartBridgeSubscribePayload(HeartBridgeBasePayload):
+    action: Literal['subscribe']
     performance_id: str
 
     _performance_id_is_valid = validator("performance_id", allow_reuse=True)(performance_id_is_valid)
 
 
 class HeartBridgePublishPayload(HeartBridgeBasePayload):
+    action: Literal['publish']
     heartrate: int
     token: str
 
 
 class HeartBridgeRegisterReturnPayload(HeartBridgeBasePayload):
+    action: Literal['register_return']
     token: str
     performance_id: str
 

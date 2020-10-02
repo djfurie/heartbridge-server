@@ -81,6 +81,7 @@ class HeartBridgeServer:
                                                             on_disconnect_handler=self.on_disconnect_handler,
                                                             on_message_handler=self.on_message_handler)
         self._performances: Dict[str, Performance] = {}
+        self._lock = asyncio.Lock()
 
     async def add_connection(self, conn: HeartBridgeConnection):
         await self._connection_mgr.add_connection(conn)
@@ -102,7 +103,7 @@ class HeartBridgeServer:
         logging.info("[%s] Handle Action: %s", conn, p.json())
 
         if p.action == "publish":
-            pass
+            await self.publish_handler(conn, payload)
         elif p.action == "subscribe":
             await self.subscribe_handler(conn, payload)
         elif p.action == "register":
@@ -190,15 +191,15 @@ class HeartBridgeServer:
             return
 
         # Check if this node is already tracking the given performance
-        if p.performance_id not in self._performances:
-            # Create the performance
-            logging.info("Creating performance: %s", p.performance_id)
-            self._performances[p.performance_id] = Performance()
+        async with self._lock:
+            if p.performance_id not in self._performances:
+                # Create the performance
+                logging.info("Creating performance: %s", p.performance_id)
+                self._performances[p.performance_id] = await Performance.create(p.performance_id)
 
         logging.debug("Subscribe: %s - %s", conn, p.performance_id)
         performance = self._performances[p.performance_id]
-
-        # TODO: Add the current connection to the Performance's subscribers list
+        await performance.add_subscriber(conn)
 
     async def publish_handler(self, conn: HeartBridgeConnection, payload: Any):
         # Attempt to unpack the payload as a Publish command
@@ -216,15 +217,18 @@ class HeartBridgeServer:
             return
 
         # Check if this node is already tracking the given performance
-        if token.performance_id not in self._performances:
-            # Create the performance
-            logging.info("Creating performance: %s", token.performance_id)
-            self._performances[token.performance_id] = Performance()
+        async with self._lock:
+            if token.performance_id not in self._performances:
+                # Create the performance
+                logging.info("Creating performance: %s", token.performance_id)
+                self._performances[token.performance_id] = await Performance.create(token.performance_id)
 
-        logging.debug("Publish: %s - %d", token.performance_id, p.heartrate)
         performance = self._performances[token.performance_id]
 
         # TODO: Publish the heartrate to the Performance
+        hr_json = {"action": "heartrate_update",
+                   "heartrate": p.heartrate}
+        await performance.broadcast(json.dumps(hr_json))
 
 
 class HeartBridgeStorage:
