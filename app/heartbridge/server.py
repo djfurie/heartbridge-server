@@ -225,10 +225,7 @@ class HeartBridgeServer:
 
         performance = self._performances[token.performance_id]
 
-        # TODO: Publish the heartrate to the Performance
-        hr_json = {"action": "heartrate_update",
-                   "heartrate": p.heartrate}
-        await performance.broadcast(json.dumps(hr_json))
+        await performance.update_heartrate(p.heartrate)
 
 
 class HeartBridgeStorage:
