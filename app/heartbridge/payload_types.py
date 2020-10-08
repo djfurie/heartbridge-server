@@ -1,4 +1,4 @@
-from pydantic import BaseModel, validator, ValidationError
+from pydantic import BaseModel, validator, ValidationError, Field
 from typing import Optional, Literal
 import datetime
 
@@ -39,10 +39,16 @@ class HeartBridgeBasePayload(BaseModel):
 
 
 class HeartBridgeRegisterPayload(HeartBridgeBasePayload):
-    action: Literal['register']
-    artist: str
-    title: str
+    action: Literal['register'] = Field("register", const="register")
+    artist: str = Field(title="Artist Name", description="this is the name of the artist giving the performance")
+    title: str = Field(title="Performance Title", description="the title of the performance")
+    email: Optional[str] = Field(title="Contact Email",
+                                 description="Email address for the main contact related to this performance")
+    description: Optional[str] = Field(title="Performance Description",
+                                       description="A short summary of what the performance is")
     performance_date: datetime.datetime
+    duration: int = Field(default=90, title="Performance Duration",
+                          description="The length of the performance, specified in minutes")
 
     _max_str_len = validator("artist", "title", allow_reuse=True)(max_str_len)
     _not_in_past = validator("performance_date", allow_reuse=True)(time_cannot_be_in_past)
@@ -50,28 +56,38 @@ class HeartBridgeRegisterPayload(HeartBridgeBasePayload):
 
 class HeartBridgeUpdatePayload(HeartBridgeRegisterPayload):
     action: Literal['update']
-    artist: Optional[str] = None
-    title: Optional[str] = None
+    artist: Optional[str] = Field(title="Artist Name",
+                                  description="this is the name of the artist giving the performance")
+    title: Optional[str] = Field(title="Performance Title", description="the title of the performance")
+    email: Optional[str] = Field(title="Contact Email",
+                                 description="Email address for the main contact related to this performance")
+    description: Optional[str] = Field(title="Performance Description",
+                                       description="A short summary of what the performance is")
     performance_date: Optional[datetime.datetime]
-    token: str
+    token: str = Field(title="Performance Token",
+                       description="A JWT formatted token that was returned from a prior 'Register' call")
 
 
 class HeartBridgeSubscribePayload(HeartBridgeBasePayload):
     action: Literal['subscribe']
-    performance_id: str
+    performance_id: str = Field(title="Performance ID",
+                                description="a 6 character string of the form [ABCDEFGHJKLMNPQRSTXYZ23456789]{6}")
 
     _performance_id_is_valid = validator("performance_id", allow_reuse=True)(performance_id_is_valid)
 
 
 class HeartBridgePublishPayload(HeartBridgeBasePayload):
     action: Literal['publish']
-    heartrate: int
-    token: str
+    heartrate: int = Field(title="Heart Rate", description="an integer heartrate in Beats Per Minute")
+    token: str = Field(title="Performance Token",
+                       description="A JWT formatted token that was returned from a prior 'Register' call")
 
 
 class HeartBridgeRegisterReturnPayload(HeartBridgeBasePayload):
     action: Literal['register_return']
-    token: str
-    performance_id: str
+    token: str = Field(title="Performance Token",
+                       description="A JWT formatted token containing details about the performance.  This is used as an authentication token when publishing heartrates")
+    performance_id: str = Field(title="Performance ID",
+                                description="a 6 character string of the form [ABCDEFGHJKLMNPQRSTXYZ23456789]{6}.  This ID is used by audience members to specify a performance to subscribe to")
 
     _performance_id_is_valid = validator("performance_id", allow_reuse=True)(performance_id_is_valid)
