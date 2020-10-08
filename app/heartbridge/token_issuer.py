@@ -50,7 +50,7 @@ class PerformanceToken:
 
     def __init__(self, artist: str = "", title: str = "",
                  performance_date: datetime.datetime = datetime.datetime.fromtimestamp(0),
-                 performance_id: str = ""):
+                 performance_id: str = "", email: str = "", description: str = "", duration: int = 90):
         self.artist: str = artist
         self.title: str = title
         if type(performance_date) is int:
@@ -58,12 +58,18 @@ class PerformanceToken:
 
         self.performance_date: datetime.datetime = performance_date
         self.performance_id: str = performance_id
+        self.email: str = email
+        self.description: str = description
+        self.duration: int = duration
 
     @classmethod
     def from_register_payload(cls, payload: HeartBridgeRegisterPayload):
         return cls(artist=payload.artist,
                    title=payload.title,
-                   performance_date=payload.performance_date)
+                   performance_date=payload.performance_date,
+                   email=payload.email,
+                   description=payload.description,
+                   duration=payload.duration)
 
     @classmethod
     def from_json(cls, data: str):
@@ -75,7 +81,11 @@ class PerformanceToken:
         return cls(artist=data.setdefault('artist', ""),
                    title=data.setdefault('title', ""),
                    performance_date=data.setdefault('performance_date', datetime.datetime.fromtimestamp(0)),
-                   performance_id=data.setdefault('performance_id', ""))
+                   performance_id=data.setdefault('performance_id', ""),
+                   email=data.setdefault("email", ""),
+                   description=data.setdefault("description", ""),
+                   duration=data.setdefault("duration", 90)
+                   )
 
     @classmethod
     def from_token(cls, data: str, verify: bool = True, verify_nbf: bool = True, key=HEARTBRIDGE_SECRET):
@@ -90,7 +100,7 @@ class PerformanceToken:
         # Validate that the performance date is legit (validity is from 5 minutes in the past to any time in the future)
         date_now = datetime.datetime.now(datetime.timezone.utc)
         start_date = self.performance_date
-        exp_date = start_date + datetime.timedelta(days=1)
+        exp_date = start_date + datetime.timedelta(minutes=self.duration + 120)
         nbf_date = start_date - datetime.timedelta(hours=1)
         if (start_date - date_now).total_seconds() < -300:
             raise PerformanceToken.PerformanceTokenDateException(
@@ -103,6 +113,9 @@ class PerformanceToken:
         # Assemble the token contents
         token_payload = {'artist': self.artist,
                          'title': self.title,
+                         'email': self.email,
+                         'description': self.description,
+                         'duration': self.duration,
                          'nbf': nbf_date,
                          'exp': exp_date,
                          'iat': date_now,
