@@ -94,6 +94,8 @@ class PerformanceToken:
             token_data = jwt.decode(data, verify=verify, options={'verify_nbf': verify_nbf}, key=key)
         except jwt.exceptions.DecodeError as e:
             raise PerformanceToken.PerformanceTokenException(f"Token is invalid! {str(e)}") from e
+        except jwt.exceptions.ImmatureSignatureError as e:
+            raise PerformanceToken.PerformanceTokenDateException(f"Token failed NBF time check! {str(e)}") from e
         return PerformanceToken.from_dict(token_data)
 
     def generate(self):
