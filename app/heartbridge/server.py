@@ -51,7 +51,7 @@ class HeartBridgeConnectionManager:
                 await self._on_disconnect_handler(conn)
 
             # Remove the connection
-            self._remove_connection(conn)
+            await self._remove_connection(conn)
 
     async def _listen_forever(self, conn: HeartBridgeConnection):
         # Listen forever
@@ -62,12 +62,10 @@ class HeartBridgeConnectionManager:
             if self._on_message_handler:
                 await self._on_message_handler(conn, payload)
 
-    def _remove_connection(self, conn: HeartBridgeConnection):
+    async def _remove_connection(self, conn: HeartBridgeConnection):
         if str(conn) in self._active_connections:
             self._active_connections.pop(str(conn))
-
-    def close_connection(self, conn: HeartBridgeConnection):
-        conn.close()
+        await conn.close()
 
 
 class HeartBridgeServer:
@@ -85,7 +83,8 @@ class HeartBridgeServer:
         logging.debug("on_connect_handler not implemented")
 
     async def on_disconnect_handler(self, conn: HeartBridgeConnection):
-        logging.debug("on_disconnect_handler not implemented")
+        for perf in self._performances.values():
+            await perf.remove_subscriber(conn)
 
     async def on_message_handler(self, conn: HeartBridgeConnection, payload: Any):
         """ Dispatch messages from connected clients to the appropriate action handler """

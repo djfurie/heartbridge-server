@@ -59,6 +59,16 @@ class Performance:
                         "active_subscriptions": subscriber_count}
         await self.broadcast(self._subscriber_count_broadcast_channel, json.dumps(sub_cnt_json))
 
+    async def remove_subscriber(self, conn: HeartBridgeConnection):
+        if str(conn) in self._subscribers:
+            subscriber_count = await self._redis.decr(f"perf:{self._performance_id}:subcnt")
+
+            # Alert all subscribers that the value has changed
+            sub_cnt_json = {"action": "subscriber_count_update",
+                            "performance_id": self._performance_id,
+                            "active_subscriptions": subscriber_count}
+            await self.broadcast(self._subscriber_count_broadcast_channel, json.dumps(sub_cnt_json))
+
     async def update_heartrate(self, heartrate):
         hr_json = {"action": "heartrate_update",
                    "heartrate": heartrate}

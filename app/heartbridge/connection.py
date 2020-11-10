@@ -31,5 +31,5 @@ class HeartBridgeConnection:
         except WebSocketDisconnect as e:
             raise HeartBridgeDisconnect from e
 
-    def close(self):
-        self._ws.close()
+    async def close(self):
+        await self._ws.close()
