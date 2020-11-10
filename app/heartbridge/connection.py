@@ -18,7 +18,12 @@ class HeartBridgeConnection:
         await self._ws.accept()
 
     async def send(self, payload: Any):
-        await self._ws.send_json(payload)
+        if isinstance(payload, dict):
+            await self._ws.send_json(payload)
+        elif isinstance(payload, str):
+            await self._ws.send_text(payload)
+        else:
+            await self._ws.send(payload)
 
     async def receive(self):
         try:
