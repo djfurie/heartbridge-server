@@ -1,3 +1,4 @@
+import datetime
 import logging
 import asyncio
 from typing import Dict, Callable, Awaitable, Any
@@ -156,10 +157,15 @@ class HeartBridgeServer:
             'performance_id': performance_id
         }
 
+        # Calculate the new expiration time
+        expiration_time = payload.performance_date + datetime.timedelta(minutes=payload.duration)
+
+        # Save off the details of the performance
+        await Performance.save_performance_token(performance_id, token_str.decode("utf-8"), expiration_time)
+
         return return_json
 
     async def update_handler(self, payload: HeartBridgeUpdatePayload):
-
         logging.info("Update: %s", payload)
 
         try:
@@ -172,6 +178,42 @@ class HeartBridgeServer:
             "action": "register_return",
             "token": token_str.decode("utf-8"),
             "performance_id": performance_id
+        }
+
+        # Calculate the new expiration time by reparsing the new token and getting the date and duration
+        token = PerformanceToken.from_token(token_str, verify=False, verify_nbf=False)
+        expiration_time = token.performance_date + datetime.timedelta(minutes=token.duration)
+
+        # Save off the details of the performance
+        await Performance.save_performance_token(performance_id, token_str.decode("utf-8"), expiration_time)
+
+        return return_json
+
+    async def get_event_details(self, performance_id: str):
+        try:
+            token_str = await Performance.get_performance_token(performance_id)
+        except Performance.PerformanceException as e:
+            return self._format_exception(e)
+
+        token = PerformanceToken.from_token(token_str, verify=False, verify_nbf=False)
+
+        return_json = {
+            "performance_id": token.performance_id,
+            "artist": token.artist,
+            "title": token.title,
+            "email": token.email,
+            "description": token.description,
+            "performance_date": token.performance_date,
+            "duration": token.duration
+        }
+
+        return return_json
+
+    async def get_events(self):
+        performances = await Performance.get_all_performance_ids()
+
+        return_json = {
+            "performances": [await self.get_event_details(perf) for perf in performances]
         }
 
         return return_json

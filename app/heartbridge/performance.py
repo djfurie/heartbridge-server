@@ -1,5 +1,5 @@
 from .connection import HeartBridgeConnection
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 import asyncio
 import logging
 import aioredis
@@ -8,6 +8,12 @@ import json
 
 
 class Performance:
+    class PerformanceException(Exception):
+        pass
+
+    class PerformanceIDUnknown(PerformanceException):
+        pass
+
     @classmethod
     async def create(cls, performance_id: str):
         self = Performance(performance_id)
@@ -39,11 +45,11 @@ class Performance:
         ch, = await self._redis.subscribe(channel)
         rate_limiter = PerformanceBroadcastRateLimiter()
         async for msg in ch.iter():
-            logging.error("Channel: %s Msg: %s", channel, msg)
+            logging.debug("Channel: %s Msg: %s", channel, msg)
             rate_limiter.schedule_rate_limited_coro(self._send_to_all, msg)
 
     async def _send_to_all(self, payload):
-        logging.error("Payload: %s", payload)
+        logging.debug("Payload: %s", payload)
         tasks = [conn.send(payload.decode("utf-8")) for conn in self._subscribers.values()]
         await asyncio.gather(*tasks)
 
@@ -75,9 +81,37 @@ class Performance:
         await self.broadcast(self._heartrate_broadcast_channel, json.dumps(hr_json))
 
     async def broadcast(self, channel, payload: str):
-        logging.info("[%s] Broadcasting: %s", self._performance_id, payload)
+        logging.debug("[%s] Broadcasting: %s", self._performance_id, payload)
         await self._redis.publish(channel, payload)
 
+    @staticmethod
+    async def save_performance_token(performance_id: str, token: str, expire_at: datetime.datetime = None):
+        key = f"perf:{performance_id}:token"
+        redis = await aioredis.create_redis_pool("redis://redis")
+        await redis.set(key, token)
+
+        if expire_at:
+            await redis.expireat(key, expire_at.timestamp())
+
+        redis.close()
+
+    @staticmethod
+    async def get_performance_token(performance_id: str) -> str:
+        redis = await aioredis.create_redis_pool("redis://redis")
+        token = await redis.get(f"perf:{performance_id}:token")
+        redis.close()
+
+        if not token:
+            raise Performance.PerformanceIDUnknown(f"Performance ID {performance_id} is not registered")
+
+        return token
+
+    @staticmethod
+    async def get_all_performance_ids() -> List[str]:
+        redis = await aioredis.create_redis_pool("redis://redis")
+        keys = await redis.keys("perf:*:token")
+        keys = [x[5:11].decode("utf-8") for x in keys]
+        return keys
 
 class PerformanceBroadcastRateLimiter:
     def __init__(self):

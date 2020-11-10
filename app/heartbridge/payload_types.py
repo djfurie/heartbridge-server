@@ -1,5 +1,5 @@
 from pydantic import BaseModel, validator, ValidationError, Field
-from typing import Optional, Literal
+from typing import Optional, Literal, List
 import datetime
 
 from .utils import PerformanceId
@@ -29,13 +29,34 @@ def performance_id_is_valid(cls, v):
 
 
 class HeartBridgeBasePayload(BaseModel):
-    action: Literal['register', 'subscribe', 'publish', 'update', 'register_return']
+    action: Literal['register', 'subscribe', 'publish', 'update', 'register_return', 'performance_details']
 
     @validator("action")
     def action_is_one_of(cls, v):
-        if v not in ['register', 'subscribe', 'publish', 'update', 'register_return']:
+        if v not in ['register', 'subscribe', 'publish', 'update', 'register_return', 'performance_details']:
             raise ValueError("Invalid action specified")
         return v
+
+
+class HeartBridgePerformanceDetailsPayload(BaseModel):
+    performance_id: str = Field(title="Performance ID",
+                                description="a 6 character string of the form [ABCDEFGHJKLMNPQRSTXYZ23456789]{6}")
+    artist: str = Field(title="Artist Name", description="this is the name of the artist giving the performance")
+    title: str = Field(title="Performance Title", description="the title of the performance")
+    email: Optional[str] = Field(title="Contact Email",
+                                 description="Email address for the main contact related to this performance")
+    description: Optional[str] = Field(title="Performance Description",
+                                       description="A short summary of what the performance is")
+    performance_date: datetime.datetime
+    duration: int = Field(default=90, title="Performance Duration",
+                          description="The length of the performance, specified in minutes")
+
+    _max_str_len = validator("artist", "title", allow_reuse=True)(max_str_len)
+    _performance_id_is_valid = validator("performance_id", allow_reuse=True)(performance_id_is_valid)
+
+
+class HeartBridgePerformancesPayload(BaseModel):
+    performances: List[HeartBridgePerformanceDetailsPayload]
 
 
 class HeartBridgeRegisterPayload(HeartBridgeBasePayload):

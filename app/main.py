@@ -1,7 +1,8 @@
 from fastapi import FastAPI, WebSocket, HTTPException
 from heartbridge import HeartBridgeServer, HeartBridgeConnection
 from heartbridge.payload_types import HeartBridgeRegisterReturnPayload, HeartBridgeRegisterPayload, \
-    HeartBridgeUpdatePayload, HeartBridgeSubscribePayload
+    HeartBridgeUpdatePayload, HeartBridgeSubscribePayload, HeartBridgePerformanceDetailsPayload, \
+    HeartBridgePerformancesPayload
 import logging
 
 LOGGING_FORMAT = '%(asctime)s :: %(name)s (%(levelname)s) -- %(message)s'
@@ -38,6 +39,22 @@ async def rest_register_endpoint(payload: HeartBridgeRegisterPayload):
 @app.post("/update", response_model=HeartBridgeRegisterReturnPayload)
 async def rest_update_endpoint(payload: HeartBridgeUpdatePayload):
     ret = await hbserver.update_handler(payload)
+    if "error" in ret:
+        raise HTTPException(status_code=400, detail=ret)
+    return ret
+
+
+@app.get("/events/{performance_id}", response_model=HeartBridgePerformanceDetailsPayload)
+async def rest_get_details(performance_id: str):
+    ret = await hbserver.get_event_details(performance_id)
+    if "error" in ret:
+        raise HTTPException(status_code=400, detail=ret)
+    return ret
+
+
+@app.get("/events/", response_model=HeartBridgePerformancesPayload)
+async def rest_get_performances():
+    ret = await hbserver.get_events()
     if "error" in ret:
         raise HTTPException(status_code=400, detail=ret)
     return ret
