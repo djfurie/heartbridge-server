@@ -85,6 +85,8 @@ class PerformanceBroadcastRateLimiter:
         diff_time = datetime.datetime.utcnow() - self._last_event_time
         if diff_time < datetime.timedelta(seconds=1.0):
             wait_time = 1.0 - diff_time.total_seconds()
+        else:
+            self._last_event_time = datetime.datetime.utcnow()
 
         self._scheduled_task = asyncio.create_task(self._execute_coro_with_wait(wait_time, f, *args))
 
