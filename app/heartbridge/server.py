@@ -1,12 +1,7 @@
-import json
-import datetime
-import random
 import logging
 import asyncio
-import aioredis
-from typing import List, Dict, Tuple, Optional, Callable, Awaitable, Any
+from typing import Dict, Callable, Awaitable, Any
 
-from . import utils
 from .connection import HeartBridgeConnection, HeartBridgeDisconnect
 from .payload_types import HeartBridgeBasePayload, HeartBridgePayloadValidationException, HeartBridgeRegisterPayload, \
     HeartBridgeUpdatePayload, HeartBridgeSubscribePayload, HeartBridgePublishPayload
@@ -226,100 +221,3 @@ class HeartBridgeServer:
         performance = self._performances[token.performance_id]
 
         await performance.update_heartrate(p.heartrate)
-
-
-class HeartBridgeStorage:
-    """ In memory storage for tracking connections to this node """
-
-    def __init__(self):
-        self._performances: Dict[str, List[str]] = {}
-        self._connections: Dict[str, List[str]] = {}
-
-    def add_subscription(self, performance_id: str, connection_id: str, expiration: int):
-        if performance_id not in self._performances:
-            self._performances[performance_id] = []
-
-        if connection_id not in self._connections:
-            self._connections[connection_id] = []
-
-        self._performances[performance_id].append(connection_id)
-        self._connections[connection_id].append(performance_id)
-        return self._performances[performance_id]
-
-    def get_subscriptions(self, performance_id: str) -> List[str]:
-        return self._performances.setdefault(performance_id, [])
-
-    def remove_subscription(self, performance_id: str, connection_id: str):
-        # Need to remake the list of connections by excluding the connection to be removed...
-        self._performances[performance_id][:] = [x for x in self._performances[performance_id] if x != connection_id]
-
-    # Remove a given connection id and all of the subscriptions associated with it
-    def remove_connection(self, connection_id: str):
-        for perf_id in self._connections['connection_id']:
-            self.remove_subscription(perf_id, connection_id)
-
-
-class PerformanceBroker:
-    """ Shuffles events between nodes """
-
-    def __init__(self):
-        self._r: Optional[aioredis.Redis] = None
-
-    async def connect(self):
-        # self._r = redis.Redis(host='redis')
-        self._r = await aioredis.create_redis_pool("redis://redis")
-
-    async def log_subscribe(self, performance_id: str):
-        if not self._r:
-            await self.connect()
-
-        key = f"perf:{performance_id}:subcnt"
-        return await self._r.incr(key)
-
-    async def publish(self, performance_id: str, heart_rate: int):
-        if not self._r:
-            await self.connect()
-
-        key = f"perf:{performance_id}:hr"
-
-        # Publish the heartrate
-        await self._r.publish(key, heart_rate)
-
-    async def subscribe(self, performance_id: str):
-        if not self._r:
-            await self.connect()
-
-        # Set up a subscription to all of the channels related to the given performance id
-        sub, = await self._r.psubscribe(f"perf:{performance_id}:*")
-
-        async def listener(channel):
-            logging.error("Starting listener: %s", str(channel))
-            async for message in channel.iter():
-                logging.error(message)
-
-        asyncio.get_running_loop().create_task(listener(sub))
-
-# class HeartBridgeStorageRedis(HeartBridgeStorage):
-#     """ Storage driver for using a redis backend """
-#
-#     def __init__(self):
-#         logging.info("Connecting to Redis")
-#         self._r = redis.Redis(host='redis')
-#
-#     def add_subscription(self, performance_id: str, connection_id: str, expiration: int):
-#         key = f"perf:{performance_id}"
-#         self._r.lpush(key, connection_id)
-#         ret = self._r.lrange(key, 0, -1)
-#         ret = [x.decode('utf-8') for x in ret]
-#         logging.error("%s - %s", key, str(ret))
-#         return ret
-#
-#     def get_subscriptions(self, performance_id: str) -> List[str]:
-#         key = f"perf:{performance_id}"
-#         return [x.decode('utf-8') for x in self._r.lrange(key, 0, -1)]
-#
-#     def remove_subscription(self, performance_id: str, connection_id: str):
-#         pass
-#
-#     def remove_connection(self, connection_id: str):
-#         pass
