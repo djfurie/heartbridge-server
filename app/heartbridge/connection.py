@@ -1,5 +1,6 @@
 from fastapi import WebSocket, WebSocketDisconnect
 from typing import Any
+import logging
 
 
 class HeartBridgeDisconnect(WebSocketDisconnect):
@@ -18,12 +19,15 @@ class HeartBridgeConnection:
         await self._ws.accept()
 
     async def send(self, payload: Any):
-        if isinstance(payload, dict):
-            await self._ws.send_json(payload)
-        elif isinstance(payload, str):
-            await self._ws.send_text(payload)
-        else:
-            await self._ws.send(payload)
+        try:
+            if isinstance(payload, dict):
+                await self._ws.send_json(payload)
+            elif isinstance(payload, str):
+                await self._ws.send_text(payload)
+            else:
+                await self._ws.send(payload)
+        except RuntimeError as e:
+            logging.error(str(e))
 
     async def receive(self):
         try:
