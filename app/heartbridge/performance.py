@@ -111,6 +111,7 @@ class Performance:
         redis = await aioredis.create_redis_pool("redis://redis")
         keys = await redis.keys("perf:*:token")
         keys = [x[5:11].decode("utf-8") for x in keys]
+        redis.close()
         return keys
 
 class PerformanceBroadcastRateLimiter:
