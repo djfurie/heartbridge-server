@@ -114,6 +114,18 @@ class Performance:
         redis.close()
         return keys
 
+    @staticmethod
+    async def delete_performance(performance_id: str) -> bool:
+        redis = await aioredis.create_redis_pool("redis://redis")
+        removed = await redis.delete(f"perf:{performance_id}:token")
+        redis.close()
+
+        if removed == 0:
+            raise Performance.PerformanceIDUnknown(f"Performance ID {performance_id} is not registered")
+
+        return removed
+
+
 class PerformanceBroadcastRateLimiter:
     def __init__(self):
         # Things to track:

@@ -29,11 +29,11 @@ def performance_id_is_valid(cls, v):
 
 
 class HeartBridgeBasePayload(BaseModel):
-    action: Literal['register', 'subscribe', 'publish', 'update', 'register_return', 'performance_details']
+    action: Literal['register', 'subscribe', 'publish', 'update', 'register_return']
 
     @validator("action")
     def action_is_one_of(cls, v):
-        if v not in ['register', 'subscribe', 'publish', 'update', 'register_return', 'performance_details']:
+        if v not in ['register', 'subscribe', 'publish', 'update', 'register_return']:
             raise ValueError("Invalid action specified")
         return v
 
@@ -57,6 +57,16 @@ class HeartBridgePerformanceDetailsPayload(BaseModel):
 
 class HeartBridgePerformancesPayload(BaseModel):
     performances: List[HeartBridgePerformanceDetailsPayload]
+
+
+class HeartBridgeDeletePayload(BaseModel):
+    token: str = Field(title="Performance Token",
+                       description="A JWT formatted token that was returned from a prior 'Register' call")
+
+
+class HeartBridgeDeleteReturnPayload(BaseModel):
+    status: Literal['success'] = Field(title="Success",
+                                       description="Returns success if the token was removed from the database")
 
 
 class HeartBridgeRegisterPayload(HeartBridgeBasePayload):

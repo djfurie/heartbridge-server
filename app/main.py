@@ -2,7 +2,7 @@ from fastapi import FastAPI, WebSocket, HTTPException
 from heartbridge import HeartBridgeServer, HeartBridgeConnection
 from heartbridge.payload_types import HeartBridgeRegisterReturnPayload, HeartBridgeRegisterPayload, \
     HeartBridgeUpdatePayload, HeartBridgeSubscribePayload, HeartBridgePerformanceDetailsPayload, \
-    HeartBridgePerformancesPayload
+    HeartBridgePerformancesPayload, HeartBridgeDeleteReturnPayload, HeartBridgeDeletePayload
 import logging
 
 LOGGING_FORMAT = '%(asctime)s :: %(name)s (%(levelname)s) -- %(message)s'
@@ -39,6 +39,14 @@ async def rest_register_endpoint(payload: HeartBridgeRegisterPayload):
 @app.post("/update", response_model=HeartBridgeRegisterReturnPayload)
 async def rest_update_endpoint(payload: HeartBridgeUpdatePayload):
     ret = await hbserver.update_handler(payload)
+    if "error" in ret:
+        raise HTTPException(status_code=400, detail=ret)
+    return ret
+
+
+@app.post("/delete", response_model=HeartBridgeDeleteReturnPayload)
+async def rest_delete_endpoint(payload: HeartBridgeDeletePayload):
+    ret = await hbserver.delete_handler(payload)
     if "error" in ret:
         raise HTTPException(status_code=400, detail=ret)
     return ret

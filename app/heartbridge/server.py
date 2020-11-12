@@ -5,7 +5,7 @@ from typing import Dict, Callable, Awaitable, Any
 
 from .connection import HeartBridgeConnection, HeartBridgeDisconnect
 from .payload_types import HeartBridgeBasePayload, HeartBridgePayloadValidationException, HeartBridgeRegisterPayload, \
-    HeartBridgeUpdatePayload, HeartBridgeSubscribePayload, HeartBridgePublishPayload
+    HeartBridgeUpdatePayload, HeartBridgeSubscribePayload, HeartBridgePublishPayload, HeartBridgeDeletePayload
 from .token_issuer import PerformanceTokenIssuer, PerformanceToken
 from .performance import Performance
 
@@ -186,6 +186,20 @@ class HeartBridgeServer:
 
         # Save off the details of the performance
         await Performance.save_performance_token(performance_id, token_str.decode("utf-8"), expiration_time)
+
+        return return_json
+
+    async def delete_handler(self, payload: HeartBridgeDeletePayload):
+        # Validate the token and extract the performance_id
+        try:
+            token = PerformanceToken.from_token(payload.token)
+            await Performance.delete_performance(token.performance_id)
+        except (PerformanceToken.PerformanceTokenException, Performance.PerformanceIDUnknown) as e:
+            return self._format_exception(e)
+
+        return_json = {
+            "status": "success"
+        }
 
         return return_json
 
