@@ -1,4 +1,5 @@
 from fastapi import WebSocket, WebSocketDisconnect
+import websockets
 from typing import Any
 import logging
 
@@ -26,8 +27,8 @@ class HeartBridgeConnection:
                 await self._ws.send_text(payload)
             else:
                 await self._ws.send(payload)
-        except RuntimeError as e:
-            logging.error(str(e))
+        except (RuntimeError, websockets.ConnectionClosedError) as e:
+            logging.debug(str(e))
 
     async def receive(self):
         try:
