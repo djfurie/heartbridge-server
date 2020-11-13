@@ -32,6 +32,7 @@ class Performance:
         self._redis: Optional[aioredis.Redis] = None
         self._subscriber_count_broadcast_channel: str = f"perf:{self._performance_id}:subscriber_event"
         self._heartrate_broadcast_channel: str = f"perf:{self._performance_id}:heartrate_event"
+        self._subscriber_count_key: str = f"perf:{self._performance_id}:subcnt"
 
         self._subscriber_count_rate_limiter = PerformanceBroadcastRateLimiter()
 
@@ -57,7 +58,7 @@ class Performance:
         self._subscribers[str(conn)] = conn
 
         # Increment the subscriber count in redis by 1
-        subscriber_count = await self._redis.incr(f"perf:{self._performance_id}:subcnt")
+        subscriber_count = await self._redis.incr(self._subscriber_count_key)
 
         # Alert all subscribers that the value has changed
         sub_cnt_json = {"action": "subscriber_count_update",
@@ -67,7 +68,10 @@ class Performance:
 
     async def remove_subscriber(self, conn: HeartBridgeConnection):
         if str(conn) in self._subscribers:
-            subscriber_count = await self._redis.decr(f"perf:{self._performance_id}:subcnt")
+            subscriber_count = await self._redis.decr(self._subscriber_count_key)
+
+            if subscriber_count == 0:
+                await self._redis.delete(self._subscriber_count_key)
 
             # Alert all subscribers that the value has changed
             sub_cnt_json = {"action": "subscriber_count_update",
