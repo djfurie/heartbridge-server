@@ -38,7 +38,21 @@ class HeartBridgeBasePayload(BaseModel):
         return v
 
 
-class HeartBridgePerformanceDetailsPayload(BaseModel):
+class HeartBridgePerformanceStatusReturnPayload(BaseModel):
+    status: Literal['pending', 'started', 'paused', 'ended'] = Field(default="pending", title="Status",
+                                                                     Description="The current status of the performance, can be one of 'pending', 'started', 'paused', or 'ended'")
+
+
+class HeartBridgePerformanceStatusPayload(HeartBridgePerformanceStatusReturnPayload):
+    token: str = Field(title="Performance Token",
+                       description="A JWT formatted token that was returned from a prior 'Register' call")
+
+
+class HeartBridgePerformanceStatusUpdatePayload(HeartBridgeBasePayload, HeartBridgePerformanceStatusReturnPayload):
+    pass
+
+
+class HeartBridgePerformanceDetailsPayload(HeartBridgePerformanceStatusReturnPayload):
     performance_id: str = Field(title="Performance ID",
                                 description="a 6 character string of the form [ABCDEFGHJKLMNPQRSTXYZ23456789]{6}")
     artist: str = Field(title="Artist Name", description="this is the name of the artist giving the performance")

@@ -1,8 +1,10 @@
 from fastapi import FastAPI, WebSocket, HTTPException
+
 from heartbridge import HeartBridgeServer, HeartBridgeConnection
 from heartbridge.payload_types import HeartBridgeRegisterReturnPayload, HeartBridgeRegisterPayload, \
     HeartBridgeUpdatePayload, HeartBridgeSubscribePayload, HeartBridgePerformanceDetailsPayload, \
-    HeartBridgePerformancesPayload, HeartBridgeDeleteReturnPayload, HeartBridgeDeletePayload
+    HeartBridgePerformancesPayload, HeartBridgeDeleteReturnPayload, HeartBridgeDeletePayload, \
+    HeartBridgePerformanceStatusPayload, HeartBridgePerformanceStatusReturnPayload
 import logging
 
 LOGGING_FORMAT = '%(asctime)s :: %(name)s (%(levelname)s) -- %(message)s'
@@ -17,15 +19,6 @@ hbserver = HeartBridgeServer()
 async def websocket_endpoint(websocket: WebSocket):
     conn = HeartBridgeConnection(websocket)
     await hbserver.add_connection(conn)
-
-
-# @app.websocket("/subscribe/{performance_id}")
-# async def websocket_subscribe_endpoint(websocket: WebSocket, performance_id: str):
-#     conn = HeartBridgeConnection(websocket)
-#     await hbserver.add_connection(conn)
-#
-#     p = HeartBridgeSubscribePayload(action="subscribe", performance_id=performance_id)
-#     await hbserver.subscribe_handler(conn, p)
 
 
 @app.post("/register", response_model=HeartBridgeRegisterReturnPayload)
@@ -47,6 +40,22 @@ async def rest_update_endpoint(payload: HeartBridgeUpdatePayload):
 @app.post("/delete", response_model=HeartBridgeDeleteReturnPayload)
 async def rest_delete_endpoint(payload: HeartBridgeDeletePayload):
     ret = await hbserver.delete_handler(payload)
+    if "error" in ret:
+        raise HTTPException(status_code=400, detail=ret)
+    return ret
+
+
+@app.get("/events/{performance_id}/status", response_model=HeartBridgePerformanceStatusReturnPayload)
+async def rest_get_performance_status(performance_id: str):
+    ret = await hbserver.get_performance_status(performance_id)
+    if "error" in ret:
+        raise HTTPException(status_code=400, detail=ret)
+    return ret
+
+
+@app.post("/events/{performance_id}/status", response_model=HeartBridgePerformanceStatusReturnPayload)
+async def rest_post_performance_status(performance_id: str, payload: HeartBridgePerformanceStatusPayload):
+    ret = await hbserver.set_performance_status(performance_id, payload)
     if "error" in ret:
         raise HTTPException(status_code=400, detail=ret)
     return ret

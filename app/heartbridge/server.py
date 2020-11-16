@@ -5,7 +5,8 @@ from typing import Dict, Callable, Awaitable, Any
 
 from .connection import HeartBridgeConnection, HeartBridgeDisconnect
 from .payload_types import HeartBridgeBasePayload, HeartBridgePayloadValidationException, HeartBridgeRegisterPayload, \
-    HeartBridgeUpdatePayload, HeartBridgeSubscribePayload, HeartBridgePublishPayload, HeartBridgeDeletePayload
+    HeartBridgeUpdatePayload, HeartBridgeSubscribePayload, HeartBridgePublishPayload, HeartBridgeDeletePayload, \
+    HeartBridgePerformanceStatusPayload
 from .token_issuer import PerformanceTokenIssuer, PerformanceToken
 from .performance import Performance
 
@@ -192,7 +193,7 @@ class HeartBridgeServer:
     async def delete_handler(self, payload: HeartBridgeDeletePayload):
         # Validate the token and extract the performance_id
         try:
-            token = PerformanceToken.from_token(payload.token)
+            token = PerformanceToken.from_token(payload.token, verify_nbf=False)
             await Performance.delete_performance(token.performance_id)
         except (PerformanceToken.PerformanceTokenException, Performance.PerformanceIDUnknown) as e:
             return self._format_exception(e)
@@ -276,3 +277,34 @@ class HeartBridgeServer:
         performance = self._performances[token.performance_id]
 
         await performance.update_heartrate(p.heartrate)
+
+    async def get_performance_status(self, performance_id: str):
+        try:
+            status = await Performance.get_performance_status(performance_id)
+        except Performance.PerformanceException as e:
+            return self._format_exception(e)
+
+        ret_json = {
+            "status": status
+        }
+        return ret_json
+
+    async def set_performance_status(self, performance_id: str, payload: HeartBridgePerformanceStatusPayload):
+        # Validate the token and extract the performance_id
+        try:
+            token = PerformanceToken.from_token(payload.token, verify_nbf=False)
+        except PerformanceToken.PerformanceTokenException as e:
+            return self._format_exception(e)
+
+        # Check if this node is already tracking the given performance
+        async with self._lock:
+            if token.performance_id not in self._performances:
+                # Create the performance
+                logging.info("Creating performance: %s", token.performance_id)
+                self._performances[token.performance_id] = await Performance.create(token.performance_id)
+
+        performance = self._performances[token.performance_id]
+
+        await performance.set_performance_status(payload.status)
+
+        return {"status": payload.status}

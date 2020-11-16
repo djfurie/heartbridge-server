@@ -23,6 +23,7 @@ class Performance:
         # Start up the listening task
         asyncio.create_task(self._listen_for_events(self._heartrate_broadcast_channel))
         asyncio.create_task(self._listen_for_events(self._subscriber_count_broadcast_channel))
+        asyncio.create_task(self._listen_for_events(self._performance_status_broadcast_channel))
 
         return self
 
@@ -30,9 +31,13 @@ class Performance:
         self._subscribers: Dict[str, HeartBridgeConnection] = {}
         self._performance_id = performance_id
         self._redis: Optional[aioredis.Redis] = None
+
         self._subscriber_count_broadcast_channel: str = f"perf:{self._performance_id}:subscriber_event"
         self._heartrate_broadcast_channel: str = f"perf:{self._performance_id}:heartrate_event"
+        self._performance_status_broadcast_channel: str = f"perf:{self._performance_id}:status_event"
+
         self._subscriber_count_key: str = f"perf:{self._performance_id}:subcnt"
+        self._performance_status_key: str = f"perf:{self._performance_id}:status"
 
         self._subscriber_count_rate_limiter = PerformanceBroadcastRateLimiter()
 
@@ -66,6 +71,12 @@ class Performance:
                         "active_subscriptions": subscriber_count}
         await self.broadcast(self._subscriber_count_broadcast_channel, json.dumps(sub_cnt_json))
 
+        # Subscribers should also get the current performance status immediately after subscribing
+        status = await self.get_performance_status(self._performance_id)
+        status_json = {"action": "performance_status_update",
+                       "status": status}
+        await conn.send(status_json)
+
     async def remove_subscriber(self, conn: HeartBridgeConnection):
         if str(conn) in self._subscribers:
             subscriber_count = await self._redis.decr(self._subscriber_count_key)
@@ -90,12 +101,15 @@ class Performance:
 
     @staticmethod
     async def save_performance_token(performance_id: str, token: str, expire_at: datetime.datetime = None):
-        key = f"perf:{performance_id}:token"
+        token_key = f"perf:{performance_id}:token"
+        status_key = f"perf:{performance_id}:status"
         redis = await aioredis.create_redis_pool("redis://redis")
-        await redis.set(key, token)
+        await redis.set(token_key, token)
+        await redis.set(status_key, "pending")
 
         if expire_at:
-            await redis.expireat(key, expire_at.timestamp())
+            await redis.expireat(token_key, expire_at.timestamp())
+            await redis.expireat(status_key, expire_at.timestamp())
 
         redis.close()
 
@@ -128,6 +142,23 @@ class Performance:
             raise Performance.PerformanceIDUnknown(f"Performance ID {performance_id} is not registered")
 
         return removed
+
+    @staticmethod
+    async def get_performance_status(performance_id: str) -> str:
+        redis = await aioredis.create_redis_pool("redis://redis")
+        status = await redis.get(f"perf:{performance_id}:status")
+        redis.close()
+
+        if not status:
+            raise Performance.PerformanceIDUnknown(f"Performance ID {performance_id} is not registered")
+
+        return status.decode("utf-8")
+
+    async def set_performance_status(self, status):
+        await self._redis.set(self._performance_status_key, status)
+        status_json = {"action": "performance_status_update",
+                       "status": status}
+        await self.broadcast(self._performance_status_broadcast_channel, json.dumps(status_json))
 
 
 class PerformanceBroadcastRateLimiter:
