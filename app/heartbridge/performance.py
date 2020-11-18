@@ -105,7 +105,7 @@ class Performance:
         status_key = f"perf:{performance_id}:status"
         redis = await aioredis.create_redis_pool("redis://redis")
         await redis.set(token_key, token)
-        await redis.set(status_key, "pending")
+        await redis.set(status_key, 0)
 
         if expire_at:
             await redis.expireat(token_key, expire_at.timestamp())
@@ -144,7 +144,7 @@ class Performance:
         return removed
 
     @staticmethod
-    async def get_performance_status(performance_id: str) -> str:
+    async def get_performance_status(performance_id: str) -> int:
         redis = await aioredis.create_redis_pool("redis://redis")
         status = await redis.get(f"perf:{performance_id}:status")
         redis.close()
@@ -152,9 +152,9 @@ class Performance:
         if not status:
             raise Performance.PerformanceIDUnknown(f"Performance ID {performance_id} is not registered")
 
-        return status.decode("utf-8")
+        return int(status)
 
-    async def set_performance_status(self, status):
+    async def set_performance_status(self, status: int):
         await self._redis.set(self._performance_status_key, status)
         status_json = {"action": "performance_status_update",
                        "status": status}

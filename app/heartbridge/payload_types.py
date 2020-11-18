@@ -39,8 +39,8 @@ class HeartBridgeBasePayload(BaseModel):
 
 
 class HeartBridgePerformanceStatusReturnPayload(BaseModel):
-    status: Literal['pending', 'started', 'paused', 'ended'] = Field(default="pending", title="Status",
-                                                                     Description="The current status of the performance, can be one of 'pending', 'started', 'paused', or 'ended'")
+    status: int = Field(default=0, title="Status",
+                        description="The current status of the performance, can be one of '0=pending', '1=started', '2=paused', or '3=ended'")
 
 
 class HeartBridgePerformanceStatusPayload(HeartBridgePerformanceStatusReturnPayload):
