@@ -14,6 +14,7 @@ services:
       - "8080:8080"
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    restart: always
 
   heartbridge:
     build: .
@@ -21,11 +22,13 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.heartbridge.rule=PathPrefix(`/`)"
       - "traefik.http.routers.heartbridge.entrypoints=heartbridge"
+    restart: always
 
   redis:
     image: "redis"
     volumes:
       - redis-data:/var/lib/redis
+    restart: always
 
 volumes:
   redis-data:
