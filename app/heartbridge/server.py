@@ -154,7 +154,7 @@ class HeartBridgeServer:
         # Pack and return the token and performance id to the requester
         return_json = {
             'action': 'register_return',
-            'token': token_str.decode('utf-8'),
+            'token': token_str,
             'performance_id': performance_id
         }
 
@@ -162,7 +162,8 @@ class HeartBridgeServer:
         expiration_time = payload.performance_date + datetime.timedelta(minutes=payload.duration)
 
         # Save off the details of the performance
-        await Performance.save_performance_token(performance_id, token_str.decode("utf-8"), expiration_time)
+        await Performance.save_performance_token(performance_id, token_str, expiration_time)
+        logging.debug("Registered Performance %s", performance_id)
 
         return return_json
 
@@ -177,7 +178,7 @@ class HeartBridgeServer:
         # Pack and return the new token and the existing performance id
         return_json = {
             "action": "register_return",
-            "token": token_str.decode("utf-8"),
+            "token": token_str,
             "performance_id": performance_id
         }
 
@@ -186,7 +187,7 @@ class HeartBridgeServer:
         expiration_time = token.performance_date + datetime.timedelta(minutes=token.duration)
 
         # Save off the details of the performance
-        await Performance.save_performance_token(performance_id, token_str.decode("utf-8"), expiration_time)
+        await Performance.save_performance_token(performance_id, token_str, expiration_time)
 
         return return_json
 

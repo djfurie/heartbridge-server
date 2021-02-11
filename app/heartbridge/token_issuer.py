@@ -7,6 +7,7 @@ import os
 from .payload_types import HeartBridgeRegisterPayload, HeartBridgeUpdatePayload
 from typing import Union
 from .utils import PerformanceId
+import logging
 
 # Secret key for signing performer tokens
 HEARTBRIDGE_SECRET = os.environ.setdefault("HEARTBRIDGE_SECRET", "hbsecretkey")
@@ -91,7 +92,7 @@ class PerformanceToken:
     def from_token(cls, data: str, verify: bool = True, verify_nbf: bool = True, key=HEARTBRIDGE_SECRET):
         # Attempt to verify/decode the token
         try:
-            token_data = jwt.decode(data, verify=verify, options={'verify_nbf': verify_nbf}, key=key)
+            token_data = jwt.decode(data, verify=verify, options={'verify_nbf': verify_nbf}, key=key, algorithms="HS256")
         except jwt.exceptions.DecodeError as e:
             raise PerformanceToken.PerformanceTokenException(f"Token is invalid! {str(e)}") from e
         except jwt.exceptions.ImmatureSignatureError as e:
