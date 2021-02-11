@@ -12,7 +12,10 @@ class PerformanceId:
         performance_id = ""
         while len(performance_id) < PerformanceId.PERFORMANCE_ID_LENGTH:
             performance_id += PerformanceId.VALID_PERFORMANCE_ID_CHARACTERS[
-                random.randint(0, len(PerformanceId.VALID_PERFORMANCE_ID_CHARACTERS) - 1)]
+                random.randint(
+                    0, len(PerformanceId.VALID_PERFORMANCE_ID_CHARACTERS) - 1
+                )
+            ]
         return performance_id
 
     # Helper function for validating a performance_id

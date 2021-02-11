@@ -4,9 +4,16 @@ import asyncio
 from typing import Dict, Callable, Awaitable, Any
 
 from .connection import HeartBridgeConnection, HeartBridgeDisconnect
-from .payload_types import HeartBridgeBasePayload, HeartBridgePayloadValidationException, HeartBridgeRegisterPayload, \
-    HeartBridgeUpdatePayload, HeartBridgeSubscribePayload, HeartBridgePublishPayload, HeartBridgeDeletePayload, \
-    HeartBridgePerformanceStatusPayload
+from .payload_types import (
+    HeartBridgeBasePayload,
+    HeartBridgePayloadValidationException,
+    HeartBridgeRegisterPayload,
+    HeartBridgeUpdatePayload,
+    HeartBridgeSubscribePayload,
+    HeartBridgePublishPayload,
+    HeartBridgeDeletePayload,
+    HeartBridgePerformanceStatusPayload,
+)
 from .token_issuer import PerformanceTokenIssuer, PerformanceToken
 from .performance import Performance
 
@@ -15,21 +22,30 @@ class HeartBridgeConnectionManager:
     """
     Keep track of active connections and dispatch events via callbacks
     """
+
     ConnectCallBackType = Callable[[HeartBridgeConnection], Awaitable[None]]
     DisconnectCallBackType = Callable[[HeartBridgeConnection], Awaitable[None]]
     MessageCallBackType = Callable[[HeartBridgeConnection, Any], Awaitable[None]]
 
-    def __init__(self,
-                 on_connect_handler: ConnectCallBackType = None,
-                 on_disconnect_handler: DisconnectCallBackType = None,
-                 on_message_handler: MessageCallBackType = None):
+    def __init__(
+        self,
+        on_connect_handler: ConnectCallBackType = None,
+        on_disconnect_handler: DisconnectCallBackType = None,
+        on_message_handler: MessageCallBackType = None,
+    ):
         # Initialize the list of connections
         self._active_connections: Dict[str, HeartBridgeConnection] = {}
 
         # Store the callbacks
-        self._on_connect_handler: HeartBridgeConnectionManager.ConnectCallBackType = on_connect_handler
-        self._on_disconnect_handler: HeartBridgeConnectionManager.DisconnectCallBackType = on_disconnect_handler
-        self._on_message_handler: HeartBridgeConnectionManager.MessageCallBackType = on_message_handler
+        self._on_connect_handler: HeartBridgeConnectionManager.ConnectCallBackType = (
+            on_connect_handler
+        )
+        self._on_disconnect_handler: HeartBridgeConnectionManager.DisconnectCallBackType = (
+            on_disconnect_handler
+        )
+        self._on_message_handler: HeartBridgeConnectionManager.MessageCallBackType = (
+            on_message_handler
+        )
 
     async def add_connection(self, conn: HeartBridgeConnection):
         """ Store the connection in the dict of active connections and wait for data """
@@ -72,9 +88,11 @@ class HeartBridgeConnectionManager:
 
 class HeartBridgeServer:
     def __init__(self):
-        self._connection_mgr = HeartBridgeConnectionManager(on_connect_handler=self.on_connect_handler,
-                                                            on_disconnect_handler=self.on_disconnect_handler,
-                                                            on_message_handler=self.on_message_handler)
+        self._connection_mgr = HeartBridgeConnectionManager(
+            on_connect_handler=self.on_connect_handler,
+            on_disconnect_handler=self.on_disconnect_handler,
+            on_message_handler=self.on_message_handler,
+        )
         self._performances: Dict[str, Performance] = {}
         self._lock = asyncio.Lock()
 
@@ -147,22 +165,28 @@ class HeartBridgeServer:
     async def register_handler(self, payload: HeartBridgeRegisterPayload):
         # Get a new performance id and token from the token issuer
         try:
-            performance_id, token_str = PerformanceTokenIssuer.register_performance(payload)
+            performance_id, token_str = PerformanceTokenIssuer.register_performance(
+                payload
+            )
         except PerformanceToken.PerformanceTokenException as e:
             return self._format_exception(e)
 
         # Pack and return the token and performance id to the requester
         return_json = {
-            'action': 'register_return',
-            'token': token_str,
-            'performance_id': performance_id
+            "action": "register_return",
+            "token": token_str,
+            "performance_id": performance_id,
         }
 
         # Calculate the new expiration time
-        expiration_time = payload.performance_date + datetime.timedelta(minutes=payload.duration)
+        expiration_time = payload.performance_date + datetime.timedelta(
+            minutes=payload.duration
+        )
 
         # Save off the details of the performance
-        await Performance.save_performance_token(performance_id, token_str, expiration_time)
+        await Performance.save_performance_token(
+            performance_id, token_str, expiration_time
+        )
         logging.debug("Registered Performance %s", performance_id)
 
         return return_json
@@ -171,7 +195,9 @@ class HeartBridgeServer:
         logging.info("Update: %s", payload)
 
         try:
-            performance_id, token_str = PerformanceTokenIssuer.update_performance_token(payload)
+            performance_id, token_str = PerformanceTokenIssuer.update_performance_token(
+                payload
+            )
         except PerformanceToken.PerformanceTokenException as e:
             return self._format_exception(e)
 
@@ -179,15 +205,19 @@ class HeartBridgeServer:
         return_json = {
             "action": "register_return",
             "token": token_str,
-            "performance_id": performance_id
+            "performance_id": performance_id,
         }
 
         # Calculate the new expiration time by reparsing the new token and getting the date and duration
         token = PerformanceToken.from_token(token_str, verify=False, verify_nbf=False)
-        expiration_time = token.performance_date + datetime.timedelta(minutes=token.duration)
+        expiration_time = token.performance_date + datetime.timedelta(
+            minutes=token.duration
+        )
 
         # Save off the details of the performance
-        await Performance.save_performance_token(performance_id, token_str, expiration_time)
+        await Performance.save_performance_token(
+            performance_id, token_str, expiration_time
+        )
 
         return return_json
 
@@ -196,12 +226,13 @@ class HeartBridgeServer:
         try:
             token = PerformanceToken.from_token(payload.token, verify_nbf=False)
             await Performance.delete_performance(token.performance_id)
-        except (PerformanceToken.PerformanceTokenException, Performance.PerformanceIDUnknown) as e:
+        except (
+            PerformanceToken.PerformanceTokenException,
+            Performance.PerformanceIDUnknown,
+        ) as e:
             return self._format_exception(e)
 
-        return_json = {
-            "status": "success"
-        }
+        return_json = {"status": "success"}
 
         return return_json
 
@@ -220,7 +251,7 @@ class HeartBridgeServer:
             "email": token.email,
             "description": token.description,
             "performance_date": token.performance_date,
-            "duration": token.duration
+            "duration": token.duration,
         }
 
         return return_json
@@ -229,7 +260,9 @@ class HeartBridgeServer:
         performances = await Performance.get_all_performance_ids()
 
         return_json = {
-            "performances": [await self.get_event_details(perf) for perf in performances]
+            "performances": [
+                await self.get_event_details(perf) for perf in performances
+            ]
         }
 
         return return_json
@@ -247,7 +280,9 @@ class HeartBridgeServer:
             if p.performance_id not in self._performances:
                 # Create the performance
                 logging.info("Creating performance: %s", p.performance_id)
-                self._performances[p.performance_id] = await Performance.create(p.performance_id)
+                self._performances[p.performance_id] = await Performance.create(
+                    p.performance_id
+                )
 
         logging.debug("Subscribe: %s - %s", conn, p.performance_id)
         performance = self._performances[p.performance_id]
@@ -273,7 +308,9 @@ class HeartBridgeServer:
             if token.performance_id not in self._performances:
                 # Create the performance
                 logging.info("Creating performance: %s", token.performance_id)
-                self._performances[token.performance_id] = await Performance.create(token.performance_id)
+                self._performances[token.performance_id] = await Performance.create(
+                    token.performance_id
+                )
 
         performance = self._performances[token.performance_id]
 
@@ -285,12 +322,12 @@ class HeartBridgeServer:
         except Performance.PerformanceException as e:
             return self._format_exception(e)
 
-        ret_json = {
-            "status": status
-        }
+        ret_json = {"status": status}
         return ret_json
 
-    async def set_performance_status(self, performance_id: str, payload: HeartBridgePerformanceStatusPayload):
+    async def set_performance_status(
+        self, performance_id: str, payload: HeartBridgePerformanceStatusPayload
+    ):
         # Validate the token and extract the performance_id
         try:
             token = PerformanceToken.from_token(payload.token, verify_nbf=False)
@@ -302,7 +339,9 @@ class HeartBridgeServer:
             if token.performance_id not in self._performances:
                 # Create the performance
                 logging.info("Creating performance: %s", token.performance_id)
-                self._performances[token.performance_id] = await Performance.create(token.performance_id)
+                self._performances[token.performance_id] = await Performance.create(
+                    token.performance_id
+                )
 
         performance = self._performances[token.performance_id]
 
